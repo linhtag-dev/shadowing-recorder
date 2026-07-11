@@ -1,0 +1,76 @@
+.card {
+  min-height: 15rem;
+  padding: clamp(1.4rem, 3vw, 2rem);
+  border: 1px solid #b9c9ba;
+  border-radius: 1rem;
+  background: var(--sage);
+}
+
+.label {
+  margin: 0 0 0.8rem;
+  color: var(--muted-ink);
+  font-size: 0.76rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.card h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.65rem;
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.status {
+  display: flex;
+  margin: 1.25rem 0 0;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: var(--muted-ink);
+  line-height: 1.6;
+}
+
+.indicator {
+  width: 0.72rem;
+  height: 0.72rem;
+  margin-top: 0.42rem;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.indicator[data-state="checking"] {
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+.indicator[data-state="connected"] {
+  border-color: #277244;
+  background: #277244;
+}
+
+.indicator[data-state="unavailable"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 52rem) {
+  .card {
+    min-height: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicator[data-state="checking"] {
+    animation: none;
+  }
+}
+

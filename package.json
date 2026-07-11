@@ -1,0 +1,32 @@
+{
+  "name": "shadowing-recorder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": ">=24.18.0 <25",
+    "npm": ">=11.16.0 <12"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build:contracts && npm run build --workspace=@shadowing-recorder/web && npm run build --workspace=@shadowing-recorder/api",
+    "build:contracts": "npm run build --workspace=@shadowing-recorder/contracts",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
+    "container:build": "docker build --tag shadowing-recorder:local .",
+    "container:run": "docker run --rm --publish 3000:3000 --name shadowing-recorder shadowing-recorder:local",
+    "dev": "npm run build:contracts && concurrently --kill-others --names api,web --prefix-colors blue,green \"npm run dev --workspace=@shadowing-recorder/api\" \"npm run dev --workspace=@shadowing-recorder/web\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "preview": "npm run build && npm run start",
+    "start": "npm run start --workspace=@shadowing-recorder/api",
+    "test": "npm run build:contracts && vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "typecheck": "npm run build:contracts && npm run typecheck --workspaces --if-present"
+  }
+}
+

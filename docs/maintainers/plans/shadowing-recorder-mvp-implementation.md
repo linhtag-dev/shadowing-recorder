@@ -7,6 +7,7 @@ Last updated: 2026-07-11
 
 - [MVP requirements](../requirements/shadowing-recorder-mvp.md)
 - [Technical design](../design/shadowing-recorder-technical-design.md)
+- [MVP technology stack and foundation plan](shadowing-recorder-mvp-technology-stack.md)
 - [YouTube compliance and privacy rules](../rules/youtube-compliance-and-privacy.md)
 
 This plan defines delivery sequence. Completion is determined by the acceptance criteria in the MVP requirements, not by stage implementation alone.
@@ -18,6 +19,12 @@ This plan defines delivery sequence. Completion is determined by the acceptance 
 - Learner-audio playback.
 - Validate simultaneous YouTube playback and microphone recording on target browsers.
 - Keep this stage on localhost or restricted development access; it is not a public-launch architecture.
+- Before this stage exits, run the proof of concept from the locally built production container with the Vite application and Hono API served by one Node.js service.
+- Do not block this stage on hosting-provider selection, production secret management, distributed rate limiting, multi-replica request coalescing, quota metrics, or operational alerts.
+
+## Deferred production deployment checkpoint
+
+After the local container and fixed-video proof of concept work, select the hosting provider and production mechanisms for secrets, distributed rate limiting, same-ID request coalescing, quota/error metrics, alerts, HTTPS, and egress. Provider-neutral Stage 2 implementation may proceed locally while this checkpoint is open, but the checkpoint must close before shared staging or public eligibility traffic.
 
 ## Stage 2: Public eligibility and policy foundation
 

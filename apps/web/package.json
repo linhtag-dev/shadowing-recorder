@@ -1,0 +1,12 @@
+{
+  "name": "@shadowing-recorder/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project tsconfig.node.json && vite build",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project tsconfig.node.json"
+  }
+}
+

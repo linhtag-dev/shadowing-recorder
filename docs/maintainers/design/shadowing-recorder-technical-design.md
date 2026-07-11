@@ -214,7 +214,7 @@ Use the official [YouTube IFrame Player API](https://developers.google.com/youtu
 Recommended configuration:
 
 - `enablejsapi=1` to enable JavaScript control.
-- `origin=<application-origin>` to identify the embedding application.
+- `origin=https://htag.uk` in production to identify the embedding application; use the explicitly configured current application origin in non-production environments.
 - `controls=1` to preserve the native player controls.
 - `playsinline=1` for inline playback on supported mobile browsers.
 - `autoplay=0`; the learner initiates playback.
@@ -222,7 +222,7 @@ Recommended configuration:
 
 Create the player only from a just-eligible ID and bind that ID as the player instance's immutable `expectedVideoId`. Register documented callbacks such as `onReady`, `onStateChange`, and `onError`; do not assume a video-change callback exists.
 
-The deployed page must send an HTTP `Referer` header or equivalent API Client identity to YouTube. Do not use `Referrer-Policy: no-referrer` or an iframe `referrerpolicy` that suppresses identity; `strict-origin-when-cross-origin` is an acceptable deployment default. Keep `origin` aligned with the canonical HTTPS application origin. Treat IFrame error `153` as a deployment/configuration failure and explain that the player request lacked required client identification.
+The deployed page must send an HTTP `Referer` header or equivalent API Client identity to YouTube. Do not use `Referrer-Policy: no-referrer` or an iframe `referrerpolicy` that suppresses identity; `strict-origin-when-cross-origin` is an acceptable deployment default. In production, keep `origin` exactly aligned with the canonical `https://htag.uk` origin. Treat IFrame error `153` as a deployment/configuration failure and explain that the player request lacked required client identification.
 
 The player remains visible and interactive. The application must not cover or interfere with YouTube branding, controls, advertisements, or required functionality.
 
