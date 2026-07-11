@@ -7,15 +7,36 @@ import type {
 } from '../player/youTubePlayer.js'
 
 export class FakeYouTubePlayer implements YouTubePlayerInstance {
+  currentTime = 0
   destroyCalls = 0
+  duration = 32 * 60 + 38
   pauseVideoCalls = 0
+  playVideoCalls = 0
+  readonly seekToCalls: Array<[number, boolean]> = []
 
   destroy() {
     ++this.destroyCalls
   }
 
+  getCurrentTime() {
+    return this.currentTime
+  }
+
+  getDuration() {
+    return this.duration
+  }
+
   pauseVideo() {
     ++this.pauseVideoCalls
+  }
+
+  playVideo() {
+    ++this.playVideoCalls
+  }
+
+  seekTo(seconds: number, allowSeekAhead: boolean) {
+    this.currentTime = seconds
+    this.seekToCalls.push([seconds, allowSeekAhead])
   }
 }
 

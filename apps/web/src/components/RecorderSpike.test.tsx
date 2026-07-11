@@ -133,6 +133,127 @@ describe('RecorderSpike', () => {
     expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
   })
 
+  it('switches and restarts both sources from the comparison dock', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const playerApi = new FakeYouTubePlayerApi()
+    const playPlayback = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined)
+    const pausePlayback = vi
+      .spyOn(HTMLMediaElement.prototype, 'pause')
+      .mockImplementation(() => undefined)
+
+    render(
+      <RecorderSpike
+        dependencies={environment.dependencies}
+        playerApi={playerApi}
+        videoConfiguration={configuredVideo}
+      />,
+    )
+
+    const playReference = await screen.findByRole('button', {
+      name: 'Play reference video',
+    })
+    expect(playReference).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Play my recording' }),
+    ).toBeDisabled()
+
+    fireEvent.click(playReference)
+    expect(playerApi.player.playVideoCalls).toBe(1)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Restart reference video' }),
+    )
+    expect(playerApi.player.seekToCalls).toEqual([[0, true]])
+    expect(playerApi.player.playVideoCalls).toBe(2)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable Practice Mode' }),
+    )
+    await screen.findByText('Ready. Play the video to start recording.')
+    act(() => {
+      playerApi.emitState('playing')
+    })
+    await screen.findByText('Recording your microphone while the video plays.')
+
+    const recorder = environment.recorderFactory.recorders[0]
+    act(() => {
+      playerApi.emitState('paused')
+      recorder?.emitData(
+        new Blob(['voice'], { type: 'audio/webm;codecs=opus' }),
+      )
+      recorder?.emitStop()
+    })
+
+    const playback = screen.getByLabelText('Latest recording playback')
+    Object.defineProperty(playback, 'duration', {
+      configurable: true,
+      value: 20,
+    })
+    playback.currentTime = 5
+    fireEvent.loadedMetadata(playback)
+    fireEvent.timeUpdate(playback)
+    expect(screen.getByText('0:05 / 0:20')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play my recording' }))
+    expect(playerApi.player.pauseVideoCalls).toBe(1)
+    expect(playPlayback).toHaveBeenCalledTimes(1)
+
+    fireEvent.play(playback)
+    expect(
+      screen.getByRole('button', { name: 'Pause my recording' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+
+    playback.currentTime = 5
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Restart my recording' }),
+    )
+    expect(playback.currentTime).toBe(0)
+    expect(playPlayback).toHaveBeenCalledTimes(2)
+
+    act(() => {
+      playerApi.emitState('playing')
+    })
+    expect(pausePlayback).toHaveBeenCalled()
+    expect(
+      screen.getByRole('button', { name: 'Pause reference video' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('toggles Practice Mode from the comparison dock', async () => {
+    const environment = createFakeRecorderEnvironment()
+
+    render(
+      <RecorderSpike
+        dependencies={environment.dependencies}
+        playerApi={new FakeYouTubePlayerApi()}
+        videoConfiguration={configuredVideo}
+      />,
+    )
+
+    const enableToggle = screen.getByRole('button', {
+      name: 'Turn Practice Mode on',
+    })
+    expect(enableToggle).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(enableToggle)
+    await screen.findByText('Ready. Play the video to start recording.')
+    expect(environment.microphone.requestCalls).toBe(1)
+    expect(
+      screen.getByRole('button', { name: 'Turn Practice Mode off' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Turn Practice Mode off' }),
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Practice Mode is off')
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(
+      screen.getByRole('button', { name: 'Turn Practice Mode on' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('stops learner playback before a new player-driven attempt', async () => {
     const environment = createFakeRecorderEnvironment()
     const playerApi = new FakeYouTubePlayerApi()

@@ -37,6 +37,18 @@ const statusMessages: Record<RecorderState, string> = {
   requestingMic: 'Waiting for microphone permission…',
 }
 
+type PlaybackSource = 'recording' | 'reference'
+
+interface PlaybackProgress {
+  currentTime: number
+  duration: number
+}
+
+const emptyPlaybackProgress: PlaybackProgress = {
+  currentTime: 0,
+  duration: 0,
+}
+
 function stopAudio(audio: HTMLAudioElement | null) {
   if (audio === null) {
     return
@@ -48,6 +60,33 @@ function stopAudio(audio: HTMLAudioElement | null) {
 
 function formatBytes(byteCount: number) {
   return new Intl.NumberFormat('en-US').format(byteCount)
+}
+
+function normaliseMediaTime(value: number) {
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function formatMediaTime(value: number) {
+  const totalSeconds = Math.floor(normaliseMediaTime(value))
+  const hours = Math.floor(totalSeconds / 3_600)
+  const minutes = Math.floor((totalSeconds % 3_600) / 60)
+  const seconds = totalSeconds % 60
+
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
+        .toString()
+        .padStart(2, '0')}`
+    : `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+function formatPlaybackProgress(progress: PlaybackProgress) {
+  if (progress.duration === 0) {
+    return 'Ready'
+  }
+
+  return `${formatMediaTime(progress.currentTime)} / ${formatMediaTime(
+    progress.duration,
+  )}`
 }
 
 function formatBooleanSetting(value: boolean | string | null) {
@@ -116,7 +155,17 @@ function ConfiguredRecorderSpike({
   const audioRef = useRef<HTMLAudioElement>(null)
   const lifecycle = useRef({ generation: 0 })
   const playerRef = useRef<YouTubePlayerInstance | null>(null)
+  const [activePlayback, setActivePlayback] =
+    useState<PlaybackSource>('reference')
+  const [audioIsPlaying, setAudioIsPlaying] = useState(false)
+  const [audioProgress, setAudioProgress] = useState(emptyPlaybackProgress)
   const [playerError, setPlayerError] = useState<string | null>(null)
+  const [playerIsReady, setPlayerIsReady] = useState(false)
+  const [playerPlaybackState, setPlayerPlaybackState] =
+    useState<YouTubePlaybackState>('unstarted')
+  const [referenceProgress, setReferenceProgress] = useState(
+    emptyPlaybackProgress,
+  )
   const [controller] = useState(
     () =>
       new RecorderController(
@@ -127,6 +176,57 @@ function ConfiguredRecorderSpike({
     controller.subscribe,
     controller.getSnapshot,
   )
+
+  const updateReferenceProgress = useCallback(() => {
+    const player = playerRef.current
+    if (player === null) {
+      return
+    }
+
+    try {
+      const nextProgress = {
+        currentTime: normaliseMediaTime(player.getCurrentTime()),
+        duration: normaliseMediaTime(player.getDuration()),
+      }
+      setReferenceProgress((currentProgress) =>
+        currentProgress.currentTime === nextProgress.currentTime &&
+        currentProgress.duration === nextProgress.duration
+          ? currentProgress
+          : nextProgress,
+      )
+    } catch {
+      // The YouTube API can briefly reject reads while its iframe is changing.
+    }
+  }, [])
+
+  const updateAudioProgress = useCallback(() => {
+    const audio = audioRef.current
+    if (audio === null) {
+      return
+    }
+
+    const nextProgress = {
+      currentTime: normaliseMediaTime(audio.currentTime),
+      duration: normaliseMediaTime(audio.duration),
+    }
+    setAudioProgress((currentProgress) =>
+      currentProgress.currentTime === nextProgress.currentTime &&
+      currentProgress.duration === nextProgress.duration
+        ? currentProgress
+        : nextProgress,
+    )
+  }, [])
+
+  useEffect(() => {
+    updateReferenceProgress()
+
+    if (!['buffering', 'playing'].includes(playerPlaybackState)) {
+      return
+    }
+
+    const interval = window.setInterval(updateReferenceProgress, 500)
+    return () => window.clearInterval(interval)
+  }, [playerPlaybackState, updateReferenceProgress])
 
   useEffect(() => {
     const lifecycleState = lifecycle.current
@@ -169,10 +269,14 @@ function ConfiguredRecorderSpike({
   const handlePlaybackStateChange = useCallback(
     (state: YouTubePlaybackState) => {
       setPlayerError(null)
+      setPlayerPlaybackState(state)
 
       switch (state) {
         case 'playing':
           stopAudio(audioRef.current)
+          setActivePlayback('reference')
+          setAudioIsPlaying(false)
+          setAudioProgress(emptyPlaybackProgress)
           controller.playerPlaying()
           break
         case 'buffering':
@@ -191,6 +295,7 @@ function ConfiguredRecorderSpike({
   const handlePlayerError = useCallback(
     (error: YouTubePlayerError) => {
       setPlayerError(error.message)
+      setPlayerIsReady(false)
       controller.interrupt(error.message)
     },
     [controller],
@@ -198,11 +303,13 @@ function ConfiguredRecorderSpike({
   const handlePlayerReady = useCallback(
     (player: YouTubePlayerInstance | null) => {
       playerRef.current = player
+      setPlayerIsReady(player !== null)
       if (player !== null) {
         setPlayerError(null)
+        updateReferenceProgress()
       }
     },
-    [],
+    [updateReferenceProgress],
   )
 
   const captureIsBusy = [
@@ -219,6 +326,7 @@ function ConfiguredRecorderSpike({
   ].includes(snapshot.state)
   const canEnable = ['disabled', 'error'].includes(snapshot.state)
   const canDisable = !['disabled', 'error'].includes(snapshot.state)
+  const practiceModeIsEnabled = canDisable
   const microphoneStatus =
     snapshot.state === 'requestingMic'
       ? 'Waiting for permission'
@@ -227,15 +335,103 @@ function ConfiguredRecorderSpike({
         : 'Microphone off'
   const errorMessage = snapshot.errorMessage ?? playerError
   const visibleStatus = errorMessage ?? statusMessages[snapshot.state]
+  const referenceIsPlaying = ['buffering', 'playing'].includes(
+    playerPlaybackState,
+  )
+  const recordingIsAvailable = snapshot.result !== null && !captureIsBusy
+  const comparisonStatus = audioIsPlaying
+    ? 'Playing your recording'
+    : referenceIsPlaying
+      ? 'Playing the reference video'
+      : recordingIsAvailable
+        ? 'Ready to compare'
+        : 'Record an attempt to compare'
 
   const enablePracticeMode = () => {
     stopAudio(audioRef.current)
+    setAudioIsPlaying(false)
     setPlayerError(null)
     controller.enable()
+  }
+  const togglePracticeMode = () => {
+    if (practiceModeIsEnabled) {
+      controller.disable()
+      return
+    }
+
+    enablePracticeMode()
   }
   const playLatestAttempt = () => {
     playerRef.current?.pauseVideo()
     controller.playerStopped()
+    setActivePlayback('recording')
+    setAudioIsPlaying(true)
+    updateAudioProgress()
+  }
+  const pauseLatestAttempt = () => {
+    setAudioIsPlaying(false)
+    updateAudioProgress()
+  }
+  const toggleReferencePlayback = () => {
+    const player = playerRef.current
+    if (player === null) {
+      return
+    }
+
+    setActivePlayback('reference')
+    if (referenceIsPlaying) {
+      player.pauseVideo()
+      return
+    }
+
+    stopAudio(audioRef.current)
+    setAudioIsPlaying(false)
+    player.playVideo()
+  }
+  const toggleRecordingPlayback = () => {
+    const audio = audioRef.current
+    if (audio === null) {
+      return
+    }
+
+    setActivePlayback('recording')
+    if (audioIsPlaying) {
+      audio.pause()
+      return
+    }
+
+    playerRef.current?.pauseVideo()
+    controller.playerStopped()
+    void audio.play().catch(() => {
+      setAudioIsPlaying(false)
+    })
+  }
+  const restartActivePlayback = () => {
+    if (activePlayback === 'recording') {
+      const audio = audioRef.current
+      if (audio === null) {
+        return
+      }
+
+      playerRef.current?.pauseVideo()
+      controller.playerStopped()
+      audio.currentTime = 0
+      updateAudioProgress()
+      void audio.play().catch(() => {
+        setAudioIsPlaying(false)
+      })
+      return
+    }
+
+    const player = playerRef.current
+    if (player === null) {
+      return
+    }
+
+    stopAudio(audioRef.current)
+    setAudioIsPlaying(false)
+    player.seekTo(0, true)
+    player.playVideo()
   }
 
   return (
@@ -258,6 +454,13 @@ function ConfiguredRecorderSpike({
           </div>
           <span className={styles.fixedBadge}>Fixed test video</span>
         </div>
+        <p className={styles.headphones}>
+          <span aria-hidden="true">🎧</span>
+          <span>
+            <strong>Wear headphones while recording.</strong> This keeps the
+            reference audio out of your microphone recording.
+          </span>
+        </p>
         <FixedVideoPlayer
           onError={handlePlayerError}
           onPlaybackStateChange={handlePlaybackStateChange}
@@ -266,13 +469,101 @@ function ConfiguredRecorderSpike({
           playerApi={playerApi}
           videoId={videoId}
         />
-        <p className={styles.headphones}>
-          <span aria-hidden="true">🎧</span>
-          <span>
-            <strong>Wear headphones while recording.</strong> This keeps the
-            reference audio out of your microphone recording.
-          </span>
-        </p>
+      </section>
+
+      <section
+        className={styles.comparisonDock}
+        aria-label="Playback comparison"
+      >
+        <div className={styles.comparisonSummary}>
+          <p>Compare playback</p>
+          <span aria-live="polite">{comparisonStatus}</span>
+        </div>
+        <div
+          className={styles.playbackControls}
+          aria-label="Quick playback controls"
+        >
+          <button
+            aria-label={`Turn Practice Mode ${
+              practiceModeIsEnabled ? 'off' : 'on'
+            }`}
+            aria-pressed={practiceModeIsEnabled}
+            className={styles.practiceToggle}
+            data-active={practiceModeIsEnabled ? 'true' : 'false'}
+            onClick={togglePracticeMode}
+            type="button"
+          >
+            <span className={styles.practiceSwitch} aria-hidden="true">
+              <span />
+            </span>
+            <span className={styles.practiceToggleCopy}>
+              <strong>Practice Mode</strong>
+              <small>{microphoneStatus}</small>
+            </span>
+          </button>
+          <button
+            aria-label={
+              referenceIsPlaying
+                ? 'Pause reference video'
+                : 'Play reference video'
+            }
+            aria-pressed={referenceIsPlaying}
+            className={styles.sourceButton}
+            data-active={referenceIsPlaying ? 'true' : 'false'}
+            disabled={!playerIsReady}
+            onClick={toggleReferencePlayback}
+            type="button"
+          >
+            <span className={styles.playbackIcon} aria-hidden="true">
+              {referenceIsPlaying ? 'Ⅱ' : '▶'}
+            </span>
+            <span className={styles.sourceButtonCopy}>
+              <strong>Reference</strong>
+              <small>{formatPlaybackProgress(referenceProgress)}</small>
+            </span>
+          </button>
+          <button
+            aria-label={
+              audioIsPlaying ? 'Pause my recording' : 'Play my recording'
+            }
+            aria-pressed={audioIsPlaying}
+            className={styles.sourceButton}
+            data-active={audioIsPlaying ? 'true' : 'false'}
+            disabled={!recordingIsAvailable}
+            onClick={toggleRecordingPlayback}
+            type="button"
+          >
+            <span className={styles.playbackIcon} aria-hidden="true">
+              {audioIsPlaying ? 'Ⅱ' : '▶'}
+            </span>
+            <span className={styles.sourceButtonCopy}>
+              <strong>My recording</strong>
+              <small>
+                {recordingIsAvailable
+                  ? formatPlaybackProgress(audioProgress)
+                  : 'Record an attempt first'}
+              </small>
+            </span>
+          </button>
+          <button
+            aria-label={`Restart ${
+              activePlayback === 'reference'
+                ? 'reference video'
+                : 'my recording'
+            }`}
+            className={styles.restartButton}
+            disabled={
+              activePlayback === 'reference'
+                ? !playerIsReady
+                : !recordingIsAvailable
+            }
+            onClick={restartActivePlayback}
+            type="button"
+          >
+            <span aria-hidden="true">↺</span>
+            <span className={styles.restartLabel}>Restart</span>
+          </button>
+        </div>
       </section>
 
       <div className={styles.workspace}>
@@ -326,7 +617,13 @@ function ConfiguredRecorderSpike({
               <audio
                 aria-label="Latest recording playback"
                 controls
+                onDurationChange={updateAudioProgress}
+                onEnded={pauseLatestAttempt}
+                onLoadedMetadata={updateAudioProgress}
+                onPause={pauseLatestAttempt}
                 onPlay={playLatestAttempt}
+                onTimeUpdate={updateAudioProgress}
+                preload="metadata"
                 ref={audioRef}
                 src={snapshot.result.objectUrl}
               />
@@ -411,6 +708,7 @@ function ConfiguredRecorderSpike({
           )}
         </aside>
       </div>
+      <div className={styles.dockClearance} aria-hidden="true" />
     </main>
   )
 }

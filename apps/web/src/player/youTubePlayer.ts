@@ -3,7 +3,11 @@ export type YouTubePlaybackState =
 
 export interface YouTubePlayerInstance {
   destroy(): void
+  getCurrentTime(): number
+  getDuration(): number
   pauseVideo(): void
+  playVideo(): void
+  seekTo(seconds: number, allowSeekAhead: boolean): void
 }
 
 export interface YouTubePlayerCallbacks {
