@@ -44,4 +44,3 @@ export type VideoEligibilityRequest = z.infer<
 export type VideoEligibilityResponse = z.infer<
   typeof VideoEligibilityResponseSchema
 >
-

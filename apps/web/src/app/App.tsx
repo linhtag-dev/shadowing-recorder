@@ -1,45 +1,24 @@
 import { Link, Route, Routes } from 'react-router-dom'
 
-import { ServiceStatus } from '../components/ServiceStatus.js'
+import { RecorderSpike } from '../components/RecorderSpike.js'
+import type { RecorderDependencies } from '../controller/browserCapabilities.js'
+import { parseVideoConfiguration } from '../videoConfiguration.js'
 import styles from './App.module.css'
 
-function HomePage() {
+export interface AppProps {
+  recorderDependencies?: RecorderDependencies | undefined
+  videoId?: string | undefined
+}
+
+function HomePage({ recorderDependencies, videoId }: AppProps) {
+  const configuredVideoId =
+    videoId === undefined ? import.meta.env.VITE_SHADOWING_VIDEO_ID : videoId
+
   return (
-    <main id="main-content" className={styles.main}>
-      <section className={styles.hero} aria-labelledby="page-title">
-        <p className={styles.eyebrow}>A focused listening practice tool</p>
-        <h1 id="page-title">Hear it. Shadow it. Hear yourself.</h1>
-        <p className={styles.intro}>
-          Shadowing Recorder is taking shape. This foundation keeps the browser
-          experience and its small API on one origin, with learner recordings
-          reserved for local browser handling in the upcoming proof of concept.
-        </p>
-      </section>
-
-      <div className={styles.grid}>
-        <ServiceStatus />
-
-        <section className={styles.card} aria-labelledby="next-milestone-title">
-          <p className={styles.cardLabel}>Next milestone</p>
-          <h2 id="next-milestone-title">Fixed-video browser validation</h2>
-          <p>
-            The next non-public build will exercise a prechecked embedded video
-            and microphone recording on the supported browser matrix. It will
-            not need a YouTube Data API credential.
-          </p>
-        </section>
-
-        <section className={styles.card} aria-labelledby="privacy-boundary-title">
-          <p className={styles.cardLabel}>Architecture boundary</p>
-          <h2 id="privacy-boundary-title">Audio stays out of the API</h2>
-          <p>
-            The server boundary is intentionally narrow. Future eligibility
-            requests may carry only a candidate video ID; learner audio has no
-            server route or shared contract.
-          </p>
-        </section>
-      </div>
-    </main>
+    <RecorderSpike
+      dependencies={recorderDependencies}
+      videoConfiguration={parseVideoConfiguration(configuredVideoId)}
+    />
   )
 }
 
@@ -57,31 +36,44 @@ function NotFoundPage() {
   )
 }
 
-export function App() {
+export function App({ recorderDependencies, videoId }: AppProps = {}) {
   return (
     <div className={styles.app}>
       <a className={styles.skipLink} href="#main-content">
         Skip to main content
       </a>
       <header className={styles.header}>
-        <Link className={styles.brand} to="/" aria-label="Shadowing Recorder home">
+        <Link
+          className={styles.brand}
+          to="/"
+          aria-label="Shadowing Recorder home"
+        >
           <span className={styles.brandMark} aria-hidden="true">
             SR
           </span>
           <span>Shadowing Recorder</span>
         </Link>
-        <span className={styles.stage}>Foundation preview</span>
+        <span className={styles.stage}>Stage 1 browser spike</span>
       </header>
 
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/"
+          element={
+            <HomePage
+              recorderDependencies={recorderDependencies}
+              videoId={videoId}
+            />
+          }
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
 
       <footer className={styles.footer}>
-        <p>Built around a local-first learner-audio boundary.</p>
+        <p>
+          Non-public validation build · learner audio stays in this browser.
+        </p>
       </footer>
     </div>
   )
 }
-

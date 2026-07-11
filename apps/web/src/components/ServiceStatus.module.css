@@ -17,7 +17,7 @@
 
 .card h2 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.65rem;
   font-weight: 500;
   line-height: 1.15;
@@ -41,17 +41,17 @@
   border-radius: 50%;
 }
 
-.indicator[data-state="checking"] {
+.indicator[data-state='checking'] {
   border-top-color: transparent;
   animation: spin 0.8s linear infinite;
 }
 
-.indicator[data-state="connected"] {
+.indicator[data-state='connected'] {
   border-color: #277244;
   background: #277244;
 }
 
-.indicator[data-state="unavailable"] {
+.indicator[data-state='unavailable'] {
   border-color: var(--accent);
   background: var(--accent);
 }
@@ -69,8 +69,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .indicator[data-state="checking"] {
+  .indicator[data-state='checking'] {
     animation: none;
   }
 }
-

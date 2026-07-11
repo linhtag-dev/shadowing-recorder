@@ -1,0 +1,277 @@
+.main {
+  width: min(100% - 2rem, 72rem);
+  margin-inline: auto;
+  flex: 1;
+  padding-block: clamp(2.5rem, 6vw, 5.5rem);
+}
+
+.introduction {
+  max-width: 48rem;
+}
+
+.kicker,
+.step {
+  margin: 0 0 0.65rem;
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.introduction h1,
+.configurationError h1 {
+  max-width: 13ch;
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(2.8rem, 7vw, 5.75rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+}
+
+.introduction > p:last-child {
+  max-width: 43rem;
+  margin: 1.5rem 0 0;
+  color: var(--muted-ink);
+  font-size: 1.1rem;
+  line-height: 1.65;
+}
+
+.playerPanel,
+.recorderPanel,
+.diagnostics,
+.configurationError {
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--paper);
+}
+
+.playerPanel {
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+  padding: clamp(1rem, 3vw, 1.75rem);
+}
+
+.sectionHeading {
+  display: flex;
+  margin-bottom: 1.25rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sectionHeading h2,
+.diagnostics h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-weight: 500;
+}
+
+.fixedBadge,
+.microphoneStatus {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.48rem 0.7rem;
+  border-radius: 999px;
+  background: var(--sage);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.microphoneStatus > span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--muted-ink);
+}
+
+.microphoneStatus[data-active='true'] > span {
+  background: #b43c2c;
+  box-shadow: 0 0 0 0.24rem rgb(180 60 44 / 15%);
+}
+
+.headphones {
+  display: flex;
+  margin: 1rem 0 0;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 0.8rem;
+  background: var(--sage);
+  color: var(--muted-ink);
+  line-height: 1.5;
+}
+
+.headphones > span:first-child {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.headphones strong {
+  color: var(--ink);
+}
+
+.workspace {
+  display: grid;
+  margin-top: 1rem;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(17rem, 0.75fr);
+}
+
+.recorderPanel,
+.diagnostics {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.liveStatus {
+  min-height: 3.25rem;
+  margin: 0 0 1.25rem;
+  padding: 0.9rem 1rem;
+  border-left: 0.3rem solid var(--accent);
+  background: #f8f3e9;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.controls button {
+  min-height: 2.8rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.controls button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.controls .primaryButton {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.controls .primaryButton:hover:not(:disabled) {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+}
+
+.controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.playback {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.playback audio {
+  display: block;
+  width: 100%;
+}
+
+.playback > p:last-child {
+  margin: 0.85rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.diagnostics {
+  background: #202a24;
+  color: #f7f2e8;
+}
+
+.diagnostics .step,
+.diagnostics .emptyEvents {
+  color: #b8c4bb;
+}
+
+.diagnostics dl {
+  margin: 1.4rem 0;
+}
+
+.diagnostics dl > div {
+  display: grid;
+  padding-block: 0.65rem;
+  border-bottom: 1px solid rgb(255 255 255 / 13%);
+  gap: 0.75rem;
+  grid-template-columns: 6.2rem minmax(0, 1fr);
+}
+
+.diagnostics dt {
+  color: #b8c4bb;
+  font-size: 0.82rem;
+}
+
+.diagnostics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.diagnostics h3 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.emptyEvents {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.eventList {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #dfe8e0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.65;
+}
+
+.configurationError {
+  width: min(100% - 2rem, 56rem);
+  margin: clamp(3rem, 10vw, 8rem) auto;
+  padding: clamp(1.5rem, 5vw, 3rem);
+}
+
+.configurationError [role='alert'] {
+  margin: 1.5rem 0 0;
+  padding: 1rem;
+  border-left: 0.3rem solid var(--accent);
+  background: #f8f3e9;
+  line-height: 1.6;
+}
+
+@media (max-width: 48rem) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 36rem) {
+  .sectionHeading {
+    flex-direction: column;
+  }
+
+  .controls button {
+    flex: 1 1 calc(50% - 0.65rem);
+  }
+}

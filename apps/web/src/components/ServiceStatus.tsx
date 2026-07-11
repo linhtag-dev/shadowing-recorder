@@ -27,7 +27,9 @@ export function ServiceStatus() {
         })
 
         if (!response.ok) {
-          throw new Error(`Health request failed with status ${response.status}`)
+          throw new Error(
+            `Health request failed with status ${response.status}`,
+          )
         }
 
         HealthResponseSchema.parse(await response.json())
@@ -67,4 +69,3 @@ export function ServiceStatus() {
     </section>
   )
 }
-

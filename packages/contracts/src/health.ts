@@ -5,4 +5,3 @@ export const HealthResponseSchema = z.strictObject({
 })
 
 export type HealthResponse = z.infer<typeof HealthResponseSchema>
-

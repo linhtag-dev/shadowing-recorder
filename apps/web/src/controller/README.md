@@ -1,4 +1,5 @@
 # Controller boundary
 
-The video-load and Practice Mode XState actors will live here after the fixed-video browser proof of concept. The walking skeleton intentionally contains no YouTube, microphone, or recording behavior.
+Stage 1 keeps its explicit recorder states in the small XState machine here and injects microphone, MediaRecorder, object-URL, and clock capabilities through browser adapters. The controller owns only session-local Blob data; it has no API or shared-contract path.
 
+The future video-load and automatic Practice Mode actors remain deferred. Stage 1 does not load the YouTube IFrame Player API or react to player state.

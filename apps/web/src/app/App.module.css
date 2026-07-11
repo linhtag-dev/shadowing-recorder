@@ -60,9 +60,7 @@
   letter-spacing: 0.08em;
 }
 
-.stage,
-.eyebrow,
-.cardLabel {
+.stage {
   color: var(--muted-ink);
   font-size: 0.76rem;
   font-weight: 750;
@@ -77,66 +75,6 @@
   padding-block: clamp(3rem, 8vw, 7rem);
 }
 
-.hero {
-  max-width: 54rem;
-}
-
-.eyebrow,
-.cardLabel {
-  margin: 0 0 0.8rem;
-}
-
-.hero h1 {
-  max-width: 13ch;
-  margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.9rem, 8vw, 6.7rem);
-  font-weight: 500;
-  letter-spacing: -0.055em;
-  line-height: 0.94;
-}
-
-.intro {
-  max-width: 43rem;
-  margin: 2rem 0 0;
-  color: var(--muted-ink);
-  font-size: clamp(1.05rem, 2vw, 1.3rem);
-  line-height: 1.65;
-}
-
-.grid {
-  display: grid;
-  margin-top: clamp(3rem, 8vw, 6rem);
-  gap: 1rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.card {
-  min-height: 15rem;
-  padding: clamp(1.4rem, 3vw, 2rem);
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
-}
-
-.card:first-child {
-  background: var(--sage);
-}
-
-.card h2 {
-  margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.65rem;
-  font-weight: 500;
-  line-height: 1.15;
-}
-
-.card p:last-child {
-  margin: 1.25rem 0 0;
-  color: var(--muted-ink);
-  line-height: 1.6;
-}
-
 .footer {
   padding-block: 1.5rem;
   border-top: 1px solid var(--line);
@@ -148,19 +86,8 @@
   margin: 0;
 }
 
-@media (max-width: 52rem) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-
-  .card {
-    min-height: auto;
-  }
-}
-
 @media (max-width: 34rem) {
   .stage {
     display: none;
   }
 }
-

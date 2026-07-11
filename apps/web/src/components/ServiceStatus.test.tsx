@@ -33,9 +33,11 @@ describe('ServiceStatus', () => {
   it('fails closed when the health payload is malformed', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ status: 'maybe' }), { status: 200 }),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ status: 'maybe' }), { status: 200 }),
+        ),
     )
 
     render(<ServiceStatus />)
@@ -47,4 +49,3 @@ describe('ServiceStatus', () => {
     ).toBeInTheDocument()
   })
 })
-

@@ -35,4 +35,3 @@ jobs:
 
       - name: Run browser smoke tests
         run: npm run test:e2e
-

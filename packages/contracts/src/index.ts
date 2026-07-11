@@ -12,4 +12,3 @@ export type {
 } from './eligibility.js'
 export { HealthResponseSchema } from './health.js'
 export type { HealthResponse } from './health.js'
-

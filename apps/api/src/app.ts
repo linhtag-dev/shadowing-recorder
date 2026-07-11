@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url'
 import type { HealthResponse } from '@shadowing-recorder/contracts'
 import { Hono } from 'hono'
 
-const defaultWebRoot = fileURLToPath(new URL('../../web/dist/', import.meta.url))
+const defaultWebRoot = fileURLToPath(
+  new URL('../../web/dist/', import.meta.url),
+)
 
 export interface AppOptions {
   webRoot?: string
@@ -49,4 +51,3 @@ export function createApp({ webRoot = defaultWebRoot }: AppOptions = {}) {
 
   return app
 }
-

@@ -44,4 +44,3 @@ export function parseServerEnvironment(
       : { webDistPath: result.data.WEB_DIST_PATH }),
   }
 }
-

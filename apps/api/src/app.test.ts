@@ -23,4 +23,3 @@ describe('application server', () => {
     )
   })
 })
-

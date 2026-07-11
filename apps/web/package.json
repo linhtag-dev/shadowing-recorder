@@ -3,10 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@shadowing-recorder/contracts": "0.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-router-dom": "7.18.1",
+    "xstate": "5.32.4"
+  },
   "scripts": {
     "build": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project tsconfig.node.json && vite build",
     "dev": "vite",
     "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project tsconfig.node.json"
   }
 }
-

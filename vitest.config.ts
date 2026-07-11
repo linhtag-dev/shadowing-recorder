@@ -21,10 +21,9 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'controller',
+          name: 'web-unit',
           environment: 'node',
-          include: ['apps/web/src/controller/**/*.test.ts'],
-          passWithNoTests: true,
+          include: ['apps/web/src/**/*.test.ts'],
         },
       },
       {
@@ -45,4 +44,3 @@ export default defineConfig({
     restoreMocks: true,
   },
 })
-
