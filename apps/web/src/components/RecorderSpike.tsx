@@ -585,8 +585,10 @@ export function RecorderSpike({
         ? 'Practice Mode is ready'
         : 'Turn on Practice Mode to record and compare'
   const practiceGateDescription = practiceModeIsEnabled
-    ? 'Play the video to start recording. Wear headphones to keep the reference audio out of your microphone recording.'
-    : 'Your microphone records only while the reference plays. Wear headphones to keep the reference audio out of your recording.'
+    ? 'Play the video to record. Headphones keep the reference audio out of your recording.'
+    : playerIsReady
+      ? 'Your microphone records only while the video plays. Headphones are recommended.'
+      : 'Load a video first. Your microphone will record only while it plays.'
   const errorMessage = snapshot.errorMessage
   const visibleStatus = errorMessage ?? statusMessages[snapshot.state]
   const referenceIsPlaying = ['buffering', 'playing'].includes(
@@ -820,95 +822,94 @@ export function RecorderSpike({
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.step}>Practice video</p>
-            <h2 id="video-title">Control the recording from the video</h2>
+            <h2 id="video-title">Set up your practice video</h2>
           </div>
-          <span className={styles.videoBadge}>
-            {selectedVideo === null
-              ? 'No active video'
-              : `Video ${selectedVideo.videoId}`}
-          </span>
         </div>
-        <form className={styles.videoLoader} onSubmit={submitVideoUrl}>
-          <label htmlFor="youtube-video-url">YouTube video URL</label>
-          <div className={styles.videoLoaderControls}>
-            <input
-              aria-describedby="youtube-video-help"
-              autoComplete="url"
-              id="youtube-video-url"
-              inputMode="url"
-              onChange={(event) => setVideoUrl(event.currentTarget.value)}
-              placeholder="https://www.youtube.com/watch?v=…"
-              spellCheck="false"
-              type="text"
-              value={videoUrl}
-            />
-            <button type="submit">Load video</button>
-          </div>
-          <p id="youtube-video-help">
-            Supports YouTube watch, youtu.be, Shorts, and embed HTTPS URLs.
-          </p>
-        </form>
-        <p
-          aria-live={videoLoadState.status === 'error' ? 'assertive' : 'polite'}
-          className={styles.videoLoadStatus}
-          role={videoLoadState.status === 'error' ? 'alert' : 'status'}
-        >
-          {videoLoadState.status === 'empty' ? (
-            <>
-              <strong>No video</strong>
-              <span>Paste a supported URL to begin.</span>
-            </>
-          ) : videoLoadState.status === 'loading' ? (
-            <>
-              <strong>Loading video</strong>
-              <span>Verifying {videoLoadState.videoId}…</span>
-            </>
-          ) : videoLoadState.status === 'ready' ? (
-            <>
-              <strong>Video ready</strong>
-              <span>Verified source ID {videoLoadState.videoId}.</span>
-            </>
-          ) : (
-            <>
-              <strong>Video error</strong>
-              <span>{videoLoadState.message}</span>
-            </>
-          )}
-        </p>
-        <div
-          className={styles.practiceGate}
-          data-active={practiceModeIsEnabled ? 'true' : 'false'}
-        >
-          <span className={styles.practiceGateStep} aria-hidden="true">
-            01
-          </span>
-          <div className={styles.practiceGateCopy}>
-            <p>Before you play</p>
-            <strong>{practiceGateTitle}</strong>
-            <span id="practice-gate-description">
-              {practiceGateDescription}
-            </span>
-          </div>
-          <button
-            aria-describedby="practice-gate-description"
-            aria-label={`Turn Practice Mode ${
-              practiceModeIsEnabled ? 'off' : 'on'
-            }`}
-            aria-pressed={practiceModeIsEnabled}
-            className={styles.practiceControl}
+        <div className={styles.videoSetup}>
+          <form className={styles.videoLoader} onSubmit={submitVideoUrl}>
+            <label htmlFor="youtube-video-url">YouTube video URL</label>
+            <div className={styles.videoLoaderControls}>
+              <input
+                aria-describedby="youtube-video-help"
+                autoComplete="url"
+                id="youtube-video-url"
+                inputMode="url"
+                onChange={(event) => setVideoUrl(event.currentTarget.value)}
+                placeholder="https://www.youtube.com/watch?v=…"
+                spellCheck="false"
+                type="text"
+                value={videoUrl}
+              />
+              <button type="submit">Load video</button>
+            </div>
+            <div className={styles.videoLoaderFooter}>
+              <p id="youtube-video-help">
+                Works with YouTube watch, Shorts, and embed links.
+              </p>
+              <p
+                aria-live={
+                  videoLoadState.status === 'error' ? 'assertive' : 'polite'
+                }
+                className={styles.videoLoadStatus}
+                role={videoLoadState.status === 'error' ? 'alert' : 'status'}
+              >
+                <span className={styles.statusDot} aria-hidden="true" />
+                {videoLoadState.status === 'empty' ? (
+                  <>
+                    <strong>No video</strong>
+                    <span>Paste a link to begin.</span>
+                  </>
+                ) : videoLoadState.status === 'loading' ? (
+                  <>
+                    <strong>Loading video</strong>
+                    <span>Verifying {videoLoadState.videoId}…</span>
+                  </>
+                ) : videoLoadState.status === 'ready' ? (
+                  <>
+                    <strong>Video ready</strong>
+                    <span>Verified source ID {videoLoadState.videoId}.</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>Video error</strong>
+                    <span>{videoLoadState.message}</span>
+                  </>
+                )}
+              </p>
+            </div>
+          </form>
+          <div
+            className={styles.practiceGate}
             data-active={practiceModeIsEnabled ? 'true' : 'false'}
-            disabled={!playerIsReady && !practiceModeIsEnabled}
-            onClick={togglePracticeMode}
-            type="button"
           >
-            <span className={styles.practiceSwitch} aria-hidden="true">
-              <span />
-            </span>
-            <span className={styles.practiceToggleCopy}>
-              <strong>{practiceControlLabel}</strong>
-              <small>{microphoneStatus}</small>
-            </span>
-          </button>
+            <div className={styles.practiceGateCopy}>
+              <p>Practice Mode</p>
+              <strong>{practiceGateTitle}</strong>
+              <span id="practice-gate-description">
+                {practiceGateDescription}
+              </span>
+            </div>
+            <button
+              aria-describedby="practice-gate-description"
+              aria-label={`Turn Practice Mode ${
+                practiceModeIsEnabled ? 'off' : 'on'
+              }`}
+              aria-pressed={practiceModeIsEnabled}
+              className={styles.practiceControl}
+              data-active={practiceModeIsEnabled ? 'true' : 'false'}
+              disabled={!playerIsReady && !practiceModeIsEnabled}
+              onClick={togglePracticeMode}
+              type="button"
+            >
+              <span className={styles.practiceSwitch} aria-hidden="true">
+                <span />
+              </span>
+              <span className={styles.practiceToggleCopy}>
+                <strong>{practiceControlLabel}</strong>
+                <small>{microphoneStatus}</small>
+              </span>
+            </button>
+          </div>
         </div>
         {selectedVideo === null ? (
           <div className={styles.videoPlaceholder}>

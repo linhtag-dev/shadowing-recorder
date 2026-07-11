@@ -67,7 +67,6 @@
   font-weight: 500;
 }
 
-.videoBadge,
 .microphoneStatus {
   display: inline-flex;
   flex: none;
@@ -81,12 +80,19 @@
   font-weight: 750;
 }
 
-.videoLoader {
-  margin-bottom: 0.75rem;
-  padding: 1rem;
+.videoSetup {
+  display: grid;
+  margin-bottom: 1rem;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 0.9rem;
   background: #f8f3e9;
+  grid-template-columns: minmax(0, 1.65fr) minmax(19rem, 0.7fr);
+}
+
+.videoLoader {
+  min-width: 0;
+  padding: 1rem 1.1rem;
 }
 
 .videoLoader > label {
@@ -137,41 +143,59 @@
   background: var(--accent-dark);
 }
 
-.videoLoader > p {
-  margin: 0.55rem 0 0;
+.videoLoaderFooter {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.videoLoaderFooter > p {
+  margin: 0.6rem 0 0;
   color: var(--muted-ink);
   font-size: 0.76rem;
 }
 
 .videoLoadStatus {
-  display: flex;
-  min-height: 3rem;
-  margin: 0 0 0.75rem;
-  align-items: baseline;
-  gap: 0.65rem;
-  padding: 0.75rem 0.9rem;
-  border-left: 0.25rem solid #637468;
-  background: var(--sage);
-  line-height: 1.4;
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  line-height: 1.3;
+  text-align: right;
 }
 
 .videoLoadStatus[role='alert'] {
-  border-left-color: var(--accent);
-  background: #fbf0ec;
+  color: var(--accent-dark);
 }
 
 .videoLoadStatus strong {
   flex: none;
+  color: var(--ink);
 }
 
-.videoLoadStatus span {
-  color: var(--muted-ink);
-  font-size: 0.86rem;
+.videoLoadStatus[role='alert'] strong {
+  color: var(--accent-dark);
+}
+
+.statusDot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  border-radius: 50%;
+  background: #7c8f81;
+}
+
+.videoLoadStatus[role='alert'] .statusDot {
+  background: var(--accent);
 }
 
 .videoPlaceholder {
   display: grid;
-  aspect-ratio: 16 / 9;
+  min-height: clamp(12rem, 24vw, 18rem);
   place-content: center;
   justify-items: center;
   gap: 0.8rem;
@@ -212,47 +236,25 @@
 }
 
 .practiceGate {
-  display: grid;
-  margin-bottom: 1rem;
-  align-items: center;
-  gap: 0.9rem;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.8rem;
   padding: 1rem;
-  border: 1px solid rgb(189 75 49 / 32%);
-  border-radius: 0.9rem;
-  background: #fbf0ec;
-  box-shadow: inset 0.25rem 0 var(--accent);
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--line);
+  background: #f4ede5;
 }
 
 .practiceGate[data-active='true'] {
-  border-color: #b7c8b9;
   background: var(--sage);
-  box-shadow: inset 0.25rem 0 #637468;
-}
-
-.practiceGateStep {
-  display: grid;
-  width: 2.35rem;
-  height: 2.35rem;
-  place-items: center;
-  border-radius: 50%;
-  background: rgb(189 75 49 / 13%);
-  color: var(--accent-dark);
-  font-size: 0.7rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-}
-
-.practiceGate[data-active='true'] .practiceGateStep {
-  background: #637468;
-  color: white;
 }
 
 .practiceGateCopy {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.18rem;
+  gap: 0.22rem;
 }
 
 .practiceGateCopy p,
@@ -263,7 +265,7 @@
 
 .practiceGateCopy p {
   color: var(--accent-dark);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 850;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -274,34 +276,33 @@
 }
 
 .practiceGateCopy strong {
-  font-size: 1rem;
+  font-size: 0.92rem;
+  line-height: 1.3;
 }
 
 .practiceGateCopy span {
-  max-width: 58rem;
+  max-width: 38ch;
   color: var(--muted-ink);
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.76rem;
+  line-height: 1.4;
 }
 
 .practiceControl {
   display: inline-flex;
-  min-width: 14rem;
-  min-height: 3.65rem;
+  width: 100%;
+  min-height: 3.15rem;
   align-items: center;
   gap: 0.65rem;
   padding: 0.55rem 0.85rem;
   border: 1px solid var(--accent);
-  border-radius: 0.75rem;
+  border-radius: 0.65rem;
   background: var(--accent);
-  box-shadow: 0 0.35rem 0.8rem rgb(139 47 32 / 18%);
   color: white;
   cursor: pointer;
   text-align: left;
   transition:
     background 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+    border-color 160ms ease;
 }
 
 .practiceControl:hover:not(:disabled) {
@@ -317,7 +318,6 @@
 .practiceControl[data-active='true'] {
   border-color: #8ea092;
   background: #fffdf8;
-  box-shadow: none;
   color: var(--ink);
 }
 
@@ -709,13 +709,20 @@
 }
 
 @media (max-width: 48rem) {
+  .videoSetup {
+    grid-template-columns: 1fr;
+  }
+
   .practiceGate {
-    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    flex-direction: row;
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .practiceControl {
-    width: 100%;
-    grid-column: 1 / -1;
+    width: auto;
+    min-width: 14rem;
   }
 
   .workspace {
@@ -728,10 +735,15 @@
     grid-template-columns: 1fr;
   }
 
-  .videoLoadStatus {
+  .videoLoaderFooter {
     align-items: flex-start;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.15rem;
+  }
+
+  .videoLoadStatus {
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .comparisonDock {
@@ -792,8 +804,14 @@
   }
 
   .practiceGate {
-    align-items: flex-start;
+    align-items: stretch;
+    flex-direction: column;
     padding: 0.85rem;
+  }
+
+  .practiceControl {
+    width: 100%;
+    min-width: 0;
   }
 
   .controls button {
