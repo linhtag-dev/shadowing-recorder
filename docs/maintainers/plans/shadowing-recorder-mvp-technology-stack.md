@@ -1,6 +1,7 @@
 # Shadowing Recorder MVP Technology Stack
 
-Status: Proposed  
+Status: Active
+
 Last updated: 2026-07-11
 
 ## Related documents
@@ -22,6 +23,12 @@ Project scaffolding should be the first implementation task, following a short a
 Hosting-provider selection and production operational infrastructure are deliberately deferred. They do not block scaffolding, a locally runnable container, or the non-public fixed-video YouTube and microphone proof of concept. They become release gates before the application is deployed to shared staging or exposes the arbitrary-video eligibility endpoint publicly.
 
 The scaffolding task should produce a tested walking skeleton rather than only generated framework files. Microphone recording and YouTube integration begin in the subsequent non-public proof-of-concept stage.
+
+## Implementation status
+
+The walking-skeleton scaffold was implemented and locally verified on 2026-07-11. The repository now contains the npm workspaces, shared runtime contracts, accessible application shell, same-origin health route and development proxy, static quality and test configuration, production Node.js server, and multi-stage Docker image described below.
+
+Local verification covers a clean lockfile install, the root `npm run check` workflow, the built-service Playwright smoke test in Chromium, Firefox, and WebKit, the development `/api/*` proxy, and a healthy locally running production container with no credential. The GitHub Actions workflow mirrors these commands; its first hosted run remains to be confirmed after the scaffold is pushed. Step 2, including all YouTube and microphone behavior, has not started.
 
 ## Proposed stack
 

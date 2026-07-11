@@ -12,7 +12,13 @@ Last updated: 2026-07-11
 
 This plan defines delivery sequence. Completion is determined by the acceptance criteria in the MVP requirements, not by stage implementation alone.
 
+## Foundation: walking skeleton
+
+Completed locally on 2026-07-11. The npm workspace, React/Vite application, Hono API, shared contracts, quality checks, three-engine browser smoke test, and single-service production container are in place. The first hosted CI run remains to be confirmed after the scaffold is pushed. No YouTube, microphone, or recording behavior was included in this foundation.
+
 ## Stage 1: Non-public recorder proof of concept
+
+Status: In progress. The fixed-video recorder implementation and synthetic automated browser coverage were completed locally on 2026-07-11. Production-container real-media testing and the required current-stable desktop and physical mobile matrix remain open; see the [Stage 1 browser and device evidence](../stage-1-browser-matrix.md). Do not mark this stage complete until that matrix passes or every incompatibility has an explicit resolution.
 
 - Fixed, developer-prechecked YouTube video.
 - Explicit `Start recording` and `Stop recording` buttons.
