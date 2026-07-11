@@ -27,6 +27,7 @@ export function FixedVideoPlayer({
   playerApi = browserYouTubePlayerApi,
   videoId,
 }: FixedVideoPlayerProps) {
+  const frameRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const embedUrl = useMemo(
     () => createFixedVideoEmbedUrl(videoId, origin),
@@ -58,6 +59,12 @@ export function FixedVideoPlayer({
           },
           onStateChange: (state) => {
             if (!abortController.signal.aborted) {
+              // Keyboard events cannot escape the cross-origin player. Native
+              // controls focus the iframe, so release it once the interaction
+              // has changed playback and restore the page-level shortcuts.
+              if (iframe.ownerDocument.activeElement === iframe) {
+                frameRef.current?.focus({ preventScroll: true })
+              }
               onPlaybackStateChange?.(state)
             }
           },
@@ -105,7 +112,7 @@ export function FixedVideoPlayer({
   }, [embedUrl, onError, onPlaybackStateChange, onPlayerReady, playerApi])
 
   return (
-    <div className={styles.frame}>
+    <div className={styles.frame} ref={frameRef} tabIndex={-1}>
       <iframe
         allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen

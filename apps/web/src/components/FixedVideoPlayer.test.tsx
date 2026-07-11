@@ -65,4 +65,27 @@ describe('FixedVideoPlayer', () => {
     expect(onPlayerReady).toHaveBeenLastCalledWith(null)
     expect(playerApi.player.destroyCalls).toBe(1)
   })
+
+  it('releases iframe focus when native player controls change playback', async () => {
+    const playerApi = new FakeYouTubePlayerApi()
+    render(
+      <FixedVideoPlayer
+        origin="http://127.0.0.1:3000"
+        playerApi={playerApi}
+        videoId="stage1_test"
+      />,
+    )
+
+    const iframe = screen.getByTitle('Shadowing practice video')
+    await waitFor(() => {
+      expect(playerApi.callbacks).not.toBeNull()
+    })
+
+    iframe.focus()
+    expect(document.activeElement).toBe(iframe)
+
+    playerApi.emitState('playing')
+
+    expect(document.activeElement).not.toBe(iframe)
+  })
 })

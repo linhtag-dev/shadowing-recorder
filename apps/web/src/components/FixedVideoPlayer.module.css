@@ -7,6 +7,10 @@
   aspect-ratio: 16 / 9;
 }
 
+.frame:focus-visible {
+  outline: none;
+}
+
 .frame iframe {
   display: block;
   width: 100%;

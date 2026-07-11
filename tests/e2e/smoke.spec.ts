@@ -178,7 +178,7 @@ test('serves the fixed-video recorder and API from one origin', async ({
   await page.route('https://www.youtube-nocookie.com/**', async (route) => {
     iframeRequestUrl = route.request().url()
     await route.fulfill({
-      body: '<!doctype html><title>Intercepted fixed video</title>',
+      body: '<!doctype html><title>Intercepted fixed video</title><button type="button">Play video</button>',
       contentType: 'text/html',
       status: 200,
     })
@@ -232,6 +232,16 @@ test('serves the fixed-video recorder and API from one origin', async ({
     'Off',
   )
   await expect(page.getByText('Auto gain').locator('..')).toContainText('Off')
+
+  await iframe
+    .contentFrame()
+    .getByRole('button', { name: 'Play video' })
+    .click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.activeElement instanceof HTMLIFrameElement),
+    )
+    .toBe(true)
   await page.evaluate(() => {
     ;(
       window as typeof window & {
@@ -242,6 +252,20 @@ test('serves the fixed-video recorder and API from one origin', async ({
   await expect(page.getByRole('status')).toContainText(
     'Recording your microphone',
   )
+  await expect(iframe.locator('..')).toHaveCSS('outline-style', 'none')
+  await page.keyboard.press('Alt+C')
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __stageOneMediaFake: { playerPauseCalls: number }
+            }
+          ).__stageOneMediaFake.playerPauseCalls,
+      ),
+    )
+    .toBe(1)
   await page.evaluate(() => {
     ;(
       window as typeof window & {
@@ -375,7 +399,7 @@ test('serves the fixed-video recorder and API from one origin', async ({
       ).__stageOneMediaFake,
   )
   expect(mediaDiagnostics).toEqual({
-    playerPauseCalls: 0,
+    playerPauseCalls: 1,
     playerPlayCalls: 2,
     playerSeekCalls: [[0, true]],
     requestedUnprocessedAudio: true,
