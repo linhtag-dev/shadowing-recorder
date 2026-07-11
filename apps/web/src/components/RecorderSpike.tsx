@@ -89,6 +89,14 @@ function formatPlaybackProgress(progress: PlaybackProgress) {
   )}`
 }
 
+function isEditableShortcutTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName))
+  )
+}
+
 function formatBooleanSetting(value: boolean | string | null) {
   if (value === null) {
     return 'Not reported'
@@ -154,6 +162,7 @@ function ConfiguredRecorderSpike({
 }: ConfiguredRecorderSpikeProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const lifecycle = useRef({ generation: 0 })
+  const pendingComparisonPlayback = useRef(false)
   const playerRef = useRef<YouTubePlayerInstance | null>(null)
   const [activePlayback, setActivePlayback] =
     useState<PlaybackSource>('reference')
@@ -273,6 +282,7 @@ function ConfiguredRecorderSpike({
 
       switch (state) {
         case 'playing':
+          pendingComparisonPlayback.current = false
           stopAudio(audioRef.current)
           setActivePlayback('reference')
           setAudioIsPlaying(false)
@@ -294,6 +304,7 @@ function ConfiguredRecorderSpike({
   )
   const handlePlayerError = useCallback(
     (error: YouTubePlayerError) => {
+      pendingComparisonPlayback.current = false
       setPlayerError(error.message)
       setPlayerIsReady(false)
       controller.interrupt(error.message)
@@ -343,9 +354,11 @@ function ConfiguredRecorderSpike({
     ? 'Playing your recording'
     : referenceIsPlaying
       ? 'Playing the reference video'
-      : recordingIsAvailable
-        ? 'Ready to compare'
-        : 'Record an attempt to compare'
+      : snapshot.state === 'finalising'
+        ? 'Finishing your recording…'
+        : recordingIsAvailable
+          ? 'Ready to compare'
+          : 'Record an attempt to compare'
 
   const enablePracticeMode = () => {
     stopAudio(audioRef.current)
@@ -362,6 +375,7 @@ function ConfiguredRecorderSpike({
     enablePracticeMode()
   }
   const playLatestAttempt = () => {
+    pendingComparisonPlayback.current = false
     playerRef.current?.pauseVideo()
     controller.playerStopped()
     setActivePlayback('recording')
@@ -378,6 +392,7 @@ function ConfiguredRecorderSpike({
       return
     }
 
+    pendingComparisonPlayback.current = false
     setActivePlayback('reference')
     if (referenceIsPlaying) {
       player.pauseVideo()
@@ -394,6 +409,7 @@ function ConfiguredRecorderSpike({
       return
     }
 
+    pendingComparisonPlayback.current = false
     setActivePlayback('recording')
     if (audioIsPlaying) {
       audio.pause()
@@ -407,6 +423,7 @@ function ConfiguredRecorderSpike({
     })
   }
   const restartActivePlayback = () => {
+    pendingComparisonPlayback.current = false
     if (activePlayback === 'recording') {
       const audio = audioRef.current
       if (audio === null) {
@@ -433,6 +450,77 @@ function ConfiguredRecorderSpike({
     player.seekTo(0, true)
     player.playVideo()
   }
+
+  useEffect(() => {
+    if (!pendingComparisonPlayback.current || !recordingIsAvailable) {
+      return
+    }
+
+    const audio = audioRef.current
+    if (audio === null) {
+      return
+    }
+
+    pendingComparisonPlayback.current = false
+    void audio.play().catch(() => {
+      setAudioIsPlaying(false)
+    })
+  }, [recordingIsAvailable])
+
+  useEffect(() => {
+    const handleComparisonShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        !event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.code !== 'KeyC' ||
+        isEditableShortcutTarget(event.target)
+      ) {
+        return
+      }
+
+      const player = playerRef.current
+      if (player === null) {
+        return
+      }
+
+      event.preventDefault()
+      if (
+        pendingComparisonPlayback.current &&
+        snapshot.state === 'finalising'
+      ) {
+        return
+      }
+
+      if (referenceIsPlaying) {
+        const audio = audioRef.current
+        pendingComparisonPlayback.current =
+          audio === null &&
+          ['buffering', 'finalising', 'recording'].includes(snapshot.state)
+        player.pauseVideo()
+
+        if (audio !== null && recordingIsAvailable) {
+          void audio.play().catch(() => {
+            setAudioIsPlaying(false)
+          })
+        }
+        return
+      }
+
+      pendingComparisonPlayback.current = false
+      stopAudio(audioRef.current)
+      setAudioIsPlaying(false)
+      player.playVideo()
+    }
+
+    document.addEventListener('keydown', handleComparisonShortcut)
+    return () => {
+      document.removeEventListener('keydown', handleComparisonShortcut)
+    }
+  }, [recordingIsAvailable, referenceIsPlaying, snapshot.state])
 
   return (
     <main id="main-content" className={styles.main}>
@@ -472,11 +560,15 @@ function ConfiguredRecorderSpike({
       </section>
 
       <section
+        aria-keyshortcuts="Alt+C"
         className={styles.comparisonDock}
         aria-label="Playback comparison"
       >
         <div className={styles.comparisonSummary}>
-          <p>Compare playback</p>
+          <p>
+            Compare playback
+            <kbd className={styles.shortcutHint}>Alt/⌥ C</kbd>
+          </p>
           <span aria-live="polite">{comparisonStatus}</span>
         </div>
         <div

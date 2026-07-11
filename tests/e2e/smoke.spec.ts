@@ -273,6 +273,19 @@ test('serves the fixed-video recorder and API from one origin', async ({
     comparisonDock.getByRole('button', { name: 'Play my recording' }),
   ).toBeEnabled()
   await expect(comparisonDock.getByText('0:23 / 32:38')).toBeVisible()
+  await page.keyboard.press('Alt+C')
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __stageOneMediaFake: { playerPlayCalls: number }
+            }
+          ).__stageOneMediaFake.playerPlayCalls,
+      ),
+    )
+    .toBe(1)
   const dockBounds = await comparisonDock.boundingBox()
   const viewportHeight = page.viewportSize()?.height
   await expect(comparisonDock).toHaveCSS('position', 'fixed')
@@ -344,7 +357,7 @@ test('serves the fixed-video recorder and API from one origin', async ({
   )
   expect(mediaDiagnostics).toEqual({
     playerPauseCalls: 0,
-    playerPlayCalls: 1,
+    playerPlayCalls: 2,
     playerSeekCalls: [[0, true]],
     requestedUnprocessedAudio: true,
     timeslices: [1_000],

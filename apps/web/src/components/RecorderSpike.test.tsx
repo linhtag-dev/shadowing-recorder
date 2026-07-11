@@ -254,6 +254,72 @@ describe('RecorderSpike', () => {
     ).toHaveAttribute('aria-pressed', 'false')
   })
 
+  it('cycles from reference capture to recording playback with Alt+C', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const playerApi = new FakeYouTubePlayerApi()
+    const playPlayback = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined)
+    const pausePlayback = vi
+      .spyOn(HTMLMediaElement.prototype, 'pause')
+      .mockImplementation(() => undefined)
+
+    render(
+      <RecorderSpike
+        dependencies={environment.dependencies}
+        playerApi={playerApi}
+        videoConfiguration={configuredVideo}
+      />,
+    )
+
+    const comparisonDock = screen.getByRole('region', {
+      name: 'Playback comparison',
+    })
+    expect(comparisonDock).toHaveAttribute('aria-keyshortcuts', 'Alt+C')
+
+    const input = document.createElement('input')
+    document.body.append(input)
+    fireEvent.keyDown(input, { altKey: true, code: 'KeyC', key: 'c' })
+    expect(playerApi.player.playVideoCalls).toBe(0)
+    input.remove()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable Practice Mode' }),
+    )
+    await screen.findByText('Ready. Play the video to start recording.')
+
+    fireEvent.keyDown(document, { altKey: true, code: 'KeyC', key: 'c' })
+    expect(playerApi.player.playVideoCalls).toBe(1)
+    act(() => {
+      playerApi.emitState('playing')
+    })
+    await screen.findByText('Recording your microphone while the video plays.')
+
+    fireEvent.keyDown(document, { altKey: true, code: 'KeyC', key: 'c' })
+    expect(playerApi.player.pauseVideoCalls).toBe(1)
+    act(() => {
+      playerApi.emitState('paused')
+    })
+    expect(comparisonDock).toHaveTextContent('Finishing your recording')
+
+    const recorder = environment.recorderFactory.recorders[0]
+    act(() => {
+      recorder?.emitData(
+        new Blob(['voice'], { type: 'audio/webm;codecs=opus' }),
+      )
+      recorder?.emitStop()
+    })
+    await waitFor(() => {
+      expect(playPlayback).toHaveBeenCalledTimes(1)
+    })
+
+    const playback = screen.getByLabelText('Latest recording playback')
+    fireEvent.play(playback)
+    fireEvent.keyDown(document, { altKey: true, code: 'KeyC', key: 'c' })
+    expect(pausePlayback).toHaveBeenCalled()
+    expect(playerApi.player.playVideoCalls).toBe(2)
+  })
+
   it('stops learner playback before a new player-driven attempt', async () => {
     const environment = createFakeRecorderEnvironment()
     const playerApi = new FakeYouTubePlayerApi()
