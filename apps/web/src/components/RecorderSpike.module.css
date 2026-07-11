@@ -120,15 +120,13 @@
 }
 
 .comparisonDock {
-  position: sticky;
-  top: max(
-    var(--comparison-dock-gap),
-    calc(100dvh - var(--comparison-dock-height) - var(--comparison-dock-gap))
-  );
+  position: fixed;
+  bottom: max(var(--comparison-dock-gap), env(safe-area-inset-bottom));
+  left: 50%;
   z-index: 5;
   display: grid;
+  width: min(100% - 2rem, 72rem);
   min-height: var(--comparison-dock-height);
-  margin-top: 1rem;
   padding: 0.7rem;
   border: 1px solid rgb(255 255 255 / 18%);
   border-radius: 1rem;
@@ -139,6 +137,7 @@
   grid-template-columns: minmax(9rem, 0.55fr) minmax(0, 3fr);
   align-items: center;
   backdrop-filter: blur(0.75rem);
+  transform: translateX(-50%);
 }
 
 .comparisonSummary {
@@ -335,9 +334,8 @@
   opacity: 0.42;
 }
 
-.dockClearance {
-  height: calc(var(--comparison-dock-height) + var(--comparison-dock-gap));
-  pointer-events: none;
+:global(body):has(.comparisonDock) {
+  padding-bottom: 6.75rem;
 }
 
 .workspace {
@@ -496,6 +494,10 @@
     grid-template-columns: 1fr;
   }
 
+  :global(body):has(.comparisonDock) {
+    padding-bottom: 8.55rem;
+  }
+
   .comparisonSummary {
     display: flex;
     align-items: center;
@@ -521,6 +523,10 @@
 
   .comparisonDock {
     padding: 0.5rem;
+  }
+
+  :global(body):has(.comparisonDock) {
+    padding-bottom: 9rem;
   }
 
   .comparisonSummary {

@@ -708,7 +708,6 @@ function ConfiguredRecorderSpike({
           )}
         </aside>
       </div>
-      <div className={styles.dockClearance} aria-hidden="true" />
     </main>
   )
 }

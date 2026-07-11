@@ -275,6 +275,7 @@ test('serves the fixed-video recorder and API from one origin', async ({
   await expect(comparisonDock.getByText('0:23 / 32:38')).toBeVisible()
   const dockBounds = await comparisonDock.boundingBox()
   const viewportHeight = page.viewportSize()?.height
+  await expect(comparisonDock).toHaveCSS('position', 'fixed')
   expect(dockBounds).not.toBeNull()
   expect(viewportHeight).toBeDefined()
   expect(dockBounds?.y ?? -1).toBeGreaterThanOrEqual(0)
@@ -296,11 +297,11 @@ test('serves the fixed-video recorder and API from one origin', async ({
   expect(
     (diagnosticsAtPageEnd?.y ?? 0) + (diagnosticsAtPageEnd?.height ?? 0),
   ).toBeLessThanOrEqual(dockAtPageEnd?.y ?? 0)
-  const dockToFooterGap =
-    (footerAtPageEnd?.y ?? 0) -
-    ((dockAtPageEnd?.y ?? 0) + (dockAtPageEnd?.height ?? 0))
-  expect(dockToFooterGap).toBeGreaterThanOrEqual(-1)
-  expect(dockToFooterGap).toBeLessThanOrEqual(32)
+  const footerToDockGap =
+    (dockAtPageEnd?.y ?? 0) -
+    ((footerAtPageEnd?.y ?? 0) + (footerAtPageEnd?.height ?? 0))
+  expect(footerToDockGap).toBeGreaterThanOrEqual(-1)
+  expect(footerToDockGap).toBeLessThanOrEqual(32)
 
   await page.setViewportSize({ height: 667, width: 375 })
   await page.evaluate(() => {
