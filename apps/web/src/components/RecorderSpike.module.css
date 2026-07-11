@@ -87,12 +87,15 @@
   border: 1px solid var(--line);
   border-radius: 0.9rem;
   background: #f8f3e9;
-  grid-template-columns: minmax(0, 1.65fr) minmax(19rem, 0.7fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(23rem, 0.9fr);
 }
 
 .videoLoader {
+  display: flex;
   min-width: 0;
-  padding: 1rem 1.1rem;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1.1rem;
 }
 
 .videoLoader > label {
@@ -239,9 +242,9 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
   gap: 0.8rem;
-  padding: 1rem;
+  padding: 1.1rem;
   border-left: 1px solid var(--line);
   background: #f4ede5;
 }
@@ -281,7 +284,7 @@
 }
 
 .practiceGateCopy span {
-  max-width: 38ch;
+  max-width: 50ch;
   color: var(--muted-ink);
   font-size: 0.76rem;
   line-height: 1.4;
@@ -289,7 +292,9 @@
 
 .practiceControl {
   display: inline-flex;
-  width: 100%;
+  width: fit-content;
+  min-width: 15rem;
+  max-width: 100%;
   min-height: 3.15rem;
   align-items: center;
   gap: 0.65rem;
@@ -716,6 +721,7 @@
   .practiceGate {
     align-items: center;
     flex-direction: row;
+    justify-content: space-between;
     border-top: 1px solid var(--line);
     border-left: 0;
   }

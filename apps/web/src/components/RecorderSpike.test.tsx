@@ -171,15 +171,17 @@ describe('RecorderSpike', () => {
     await waitFor(() => expect(playerApi.requests).toHaveLength(2))
 
     await act(async () => playerApi.ready(1))
-    expect(
-      screen.getByText('Verified source ID stage2_test.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Ready to play.')).toBeInTheDocument()
+    expect(screen.getByTitle('Shadowing practice video')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/embed/stage2_test'),
+    )
     await act(async () => playerApi.ready(0))
 
-    expect(
-      screen.getByText('Verified source ID stage2_test.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Verified source ID stage1_test.')).toBeNull()
+    expect(screen.getByTitle('Shadowing practice video')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/embed/stage2_test'),
+    )
     expect(playerApi.requests[0]?.player.destroyCalls).toBe(1)
     expect(playerApi.requests[1]?.player.destroyCalls).toBe(0)
   })
@@ -666,9 +668,10 @@ describe('RecorderSpike', () => {
     submitVideoUrl(videoBUrl)
     await waitFor(() => expect(playerApi.requests).toHaveLength(2))
     await act(async () => playerApi.ready(1))
-    expect(
-      screen.getByText('Verified source ID stage2_test.'),
-    ).toBeInTheDocument()
+    expect(screen.getByTitle('Shadowing practice video')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/embed/stage2_test'),
+    )
 
     resolvePermission?.()
     await waitFor(() => {
@@ -708,7 +711,7 @@ describe('RecorderSpike', () => {
     expect(playerApi.requests).toHaveLength(1)
 
     submitVideoUrl('https://www.youtube.com/shorts/stage3_test')
-    expect(screen.getByText('Verifying stage3_test…')).toBeInTheDocument()
+    expect(screen.getByText('Checking link…')).toBeInTheDocument()
     expect(playerApi.requests).toHaveLength(1)
 
     act(() => {
@@ -719,9 +722,10 @@ describe('RecorderSpike', () => {
     expect(playerApi.requests[1]?.player.videoUrl).toContain('stage3_test')
     await act(async () => playerApi.ready(1))
 
-    expect(
-      screen.getByText('Verified source ID stage3_test.'),
-    ).toBeInTheDocument()
+    expect(screen.getByTitle('Shadowing practice video')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/embed/stage3_test'),
+    )
     expect(screen.getByLabelText('Latest recording playback')).toHaveAttribute(
       'src',
       'blob:recording-1',

@@ -862,12 +862,12 @@ export function RecorderSpike({
                 ) : videoLoadState.status === 'loading' ? (
                   <>
                     <strong>Loading video</strong>
-                    <span>Verifying {videoLoadState.videoId}…</span>
+                    <span>Checking link…</span>
                   </>
                 ) : videoLoadState.status === 'ready' ? (
                   <>
                     <strong>Video ready</strong>
-                    <span>Verified source ID {videoLoadState.videoId}.</span>
+                    <span>Ready to play.</span>
                   </>
                 ) : (
                   <>
