@@ -46,6 +46,12 @@ Stage 1's fixed-video recorder, synthetic automation, production-container
 real-media run, and required desktop and physical-device matrix were completed
 on 2026-07-11.
 
+The non-public Stage 2 slice implemented local dynamic URL loading,
+privacy-enhanced player replacement, expected-video identity validation,
+player-driven Practice Mode, latest-recording comparison controls, and
+responsive desktop/mobile layouts on 2026-07-12. The implementation plan owns
+the remaining public-launch and controller work.
+
 ## Stack
 
 | Layer | Choice |
@@ -55,7 +61,7 @@ on 2026-07-11.
 | Frontend | React, Vite, and strict TypeScript |
 | Client routing | React Router with static-host SPA fallback |
 | Styling | CSS Modules and CSS custom properties |
-| Runtime orchestration | XState v5 for player-load and Practice Mode state machines |
+| Runtime orchestration | XState v5 for Practice Mode plus explicit generation-guarded player-load transactions |
 | Video integration | YouTube IFrame Player API using `youtube-nocookie.com` |
 | Local validation | Zod and explicit TypeScript parsing at browser boundaries |
 | Unit and component tests | Vitest with fake clocks and injected browser adapters |

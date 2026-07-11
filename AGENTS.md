@@ -1,31 +1,112 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Product and Architecture Boundary
 
-This is an npm-workspace TypeScript monorepo. `apps/web/src/` contains the React/Vite client, component styles, and browser tests. `apps/api/src/` contains the Hono server, routes, and runtime configuration. Shared Zod schemas and types belong in `packages/contracts/src/`. Both apps may import contracts; browser code must not import the API workspace. Cross-browser smoke tests live in `tests/e2e/`, while architecture notes live in `docs/maintainers/`.
+Shadowing Recorder is a privacy-first browser product. React/Vite owns URL
+parsing, the YouTube iframe, microphone capture, session-local Blob recordings,
+and playback. The accepted production architecture is a static site with no
+YouTube Data API credential or runtime application backend.
+
+`apps/api/` and the health/eligibility code in `packages/contracts/` are
+walking-skeleton scaffolding retained for local preview and regression tests.
+Do not make new product behavior depend on them or add selected URLs, player
+activity, diagnostics, consent state, microphone data, or learner audio to a
+server contract. Browser code must never import the API workspace.
+
+## Project Structure and Module Ownership
+
+- `apps/web/src/app/`: application shell and routes.
+- `apps/web/src/components/`: React UI and component-scoped `*.module.css`.
+- `apps/web/src/controller/`: headless Practice Mode, recorder, and microphone
+  lifecycle. Keep browser capabilities injectable for deterministic tests.
+- `apps/web/src/player/`: YouTube IFrame Player API adapter.
+- `apps/web/src/youtubeVideoUrl.ts` and `videoEmbed.ts`: local URL validation
+  and privacy-enhanced iframe construction.
+- `apps/api/src/`: temporary Hono health/static-preview process.
+- `packages/contracts/src/`: temporary shared Zod contracts.
+- `tests/e2e/`: built-application Playwright smoke tests.
+- `docs/maintainers/`: product requirements, runtime design, plans, decisions,
+  rules, test procedures, and historical evidence.
 
 ## Build, Test, and Development Commands
 
-Use Node.js 24.18 and npm 11.16 as pinned by the repository.
+Use Node.js 24.18.0 and npm 11.16.0 as pinned by the repository.
 
-- `npm ci`: install the exact dependencies from `package-lock.json`.
-- `npm run dev`: build shared contracts, then run the API and Vite dev servers.
-- `npm run check`: verify formatting, linting, types, unit tests, and production builds.
-- `npm run test:e2e`: build the application and run Playwright in Chromium, Firefox, and WebKit. Install browsers once with `npx playwright install chromium firefox webkit`.
-- `npm run preview`: build and serve the single-service production preview at `127.0.0.1:3000`.
+- `npm ci`: install exactly from `package-lock.json`.
+- `npm run dev`: build contracts, then run Hono and Vite in watch mode.
+- `npm test`: build contracts and run all Vitest projects.
+- `npm run format`: format the repository with Prettier.
+- `npm run check`: run formatting, lint, strict types, Vitest, and all builds.
+- `npm run test:e2e`: build and run Playwright in Chromium, Firefox, and
+  WebKit. Install them once with
+  `npx playwright install chromium firefox webkit`.
+- `npm run preview`: build all workspaces and serve the temporary
+  single-service preview at `127.0.0.1:3000`.
+- `npm run container:build` / `npm run container:run`: build and run that same
+  preview package in Docker.
 
-## Coding Style & Naming Conventions
+## Coding Style and Runtime Correctness
 
-Write strict TypeScript using ES modules. EditorConfig and Prettier enforce two-space indentation, LF endings, single quotes, trailing commas, and no semicolons. Run `npm run format` before submitting; ESLint warnings fail CI. Use `PascalCase` for React components, `camelCase` for functions and variables, and `*.module.css` for component-scoped styles. Keep server-only environment access in `apps/api`; expose browser configuration only through explicitly public `VITE_*` variables.
+Write strict TypeScript with ES modules. EditorConfig and Prettier enforce
+two-space indentation, LF endings, single quotes, trailing commas, and no
+semicolons. ESLint warnings fail CI. Use `PascalCase` for React components,
+`camelCase` for functions and variables, and CSS Modules for component styles.
+Expose browser configuration only through intentionally public `VITE_*` values;
+treat every such value as public bundle content.
+
+Keep asynchronous media ownership in the controller rather than in loosely
+related component effects. Player replacement and recorder work must preserve
+load/session generations, immutable expected-video bindings, attempt-scoped
+chunks, idempotent shutdown, and stale-callback guards. Revalidate player
+identity at readiness and before state-changing playback or recording actions.
+Never construct an iframe from unvalidated input or allow learner playback and
+microphone recording to become app-initiated concurrent sources.
 
 ## Testing Guidelines
 
-Vitest runs Node tests for contracts and API code plus jsdom/Testing Library tests for React components. Name colocated unit tests `*.test.ts` or `*.test.tsx`; name Playwright scenarios `*.spec.ts` under `tests/e2e/`. Add a focused regression test with each behavior change. No coverage threshold is configured, so prioritize meaningful boundary, failure-path, and user-visible assertions. Run `npm test` for unit tests and `npm run test:e2e` for full browser verification.
+Vitest uses Node projects for contracts, API, controller, player, and URL code,
+plus jsdom/Testing Library for React components. Name colocated tests
+`*.test.ts` or `*.test.tsx`; name Playwright scenarios `*.spec.ts` under
+`tests/e2e/`.
 
-## Commit & Pull Request Guidelines
+Add a focused regression test for every behavior change, especially permission
+and finalisation failures, rapid player replacement, stale callbacks, identity
+drift, lifecycle shutdown, and visible accessibility state. Keep automated
+browser tests deterministic: intercept YouTube and inject player/media fakes;
+CI must not contact live YouTube or request a real microphone. Real-media checks
+follow `docs/maintainers/testing/locally-hosted.md` and never replace automated
+coverage.
 
-Commit messages must follow the Conventional Commits format, using an imperative `<type>: <summary>` subject such as `chore: scaffold ...` or `docs: add ...`. Common types include `feat`, `fix`, `test`, `docs`, and `chore`. Pull requests should explain the motivation and scope, link relevant issues or maintainer documents, list validation commands, and include screenshots for visible UI changes. Keep changes focused, update the lockfile when dependencies change, and ensure both `npm run check` and Playwright pass.
+Run `npm run check` for every change and `npm run test:e2e` for user-visible,
+player, recorder, routing, preview, or browser-boundary changes.
 
-## Security & Configuration
+## Documentation Ownership
 
-Copy `.env.example` only for local overrides. Never commit `.env`, credentials, or learner audio. Treat all `VITE_*` values as public browser data.
+- `README.md` describes the current implemented build and supported commands.
+- `docs/maintainers/requirements/` owns target MVP scope and acceptance.
+- `docs/maintainers/design/` owns target runtime semantics and failure safety.
+- `docs/maintainers/plans/` records implementation status and remaining work.
+- `docs/maintainers/decisions/` contains accepted and superseded architecture
+  decisions; do not rewrite historical decisions to look current.
+- `docs/maintainers/stage-1-browser-matrix.md` is historical evidence, not the
+  current test procedure.
+
+Update the README and implementation plan when behavior changes. Update
+requirements, design, privacy rules, or an ADR only when their owned decision
+changes. Keep implementation status separate from target acceptance language.
+
+## Commits and Pull Requests
+
+Use Conventional Commits with an imperative `<type>: <summary>` subject, such
+as `feat: add ...`, `fix: prevent ...`, or `docs: clarify ...`. Keep changes
+focused and update the lockfile whenever dependencies change. Pull requests
+should explain motivation and scope, link relevant maintainer documents, list
+validation commands, and include screenshots for visible UI changes. Ensure
+`npm run check` and relevant Playwright tests pass.
+
+## Security and Configuration
+
+Copy `.env.example` only for local overrides. Never commit `.env`, credentials,
+tunnel tokens, externally selected test-video details, or learner audio. Do not
+put sensitive values in `VITE_*` variables, shell history, screenshots, issues,
+or test logs. Learner audio must remain session-local browser-owned Blob data.

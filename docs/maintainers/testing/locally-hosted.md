@@ -12,12 +12,14 @@ the repository, an issue, a chat, a screenshot, or a run log.
 
 The tunnel is temporary test infrastructure. It does not settle the production
 hosting, authentication, privacy, secret-management, or monitoring decisions.
+This guide exercises the current dynamic URL-loader build; the
+[Stage 1 browser matrix](../stage-1-browser-matrix.md) is historical evidence.
 
-## Prepare the production container
+## Prepare the preview container
 
 Keep only the prechecked video ID and its verification date in the external
 operator run log. Hold the full URL separately for the scheduled test. The
-production bundle contains no selected video configuration:
+built bundle contains no selected video configuration:
 
 ```sh
 npm run container:build
@@ -53,7 +55,7 @@ and [tunnel run parameters](https://developers.cloudflare.com/tunnel/advanced/ru
 Create a remotely managed tunnel in the Cloudflare dashboard and add a
 published application route with these properties:
 
-- Hostname: the dedicated Stage 1 test hostname.
+- Hostname: a dedicated restricted-test hostname.
 - Service: `http://127.0.0.1:3000`.
 - Final ingress fallback: `http_status:404`.
 - Private-network or WARP routing: disabled.
@@ -92,7 +94,7 @@ and [session management](https://developers.cloudflare.com/cloudflare-one/access
 
 ### Remove a previously installed root service
 
-The Stage 1 tunnel must run only on demand as the current user. If `cloudflared`
+The test tunnel must run only on demand as the current user. If `cloudflared`
 was previously installed as a root LaunchDaemon, remove it before continuing:
 
 ```sh
@@ -148,7 +150,7 @@ Record the non-secret HTTPS origin only in the external run log, then set it in
 the current shell:
 
 ```sh
-export STAGE1_TUNNEL_ORIGIN='https://<configured-test-hostname>'
+export TEST_TUNNEL_ORIGIN='https://<configured-test-hostname>'
 ```
 
 Before authenticating, inspect both routes from a private browser session or a
@@ -156,10 +158,10 @@ terminal that has no Access session:
 
 ```sh
 curl --silent --show-error --dump-header - --output /dev/null \
-  "$STAGE1_TUNNEL_ORIGIN/"
+  "$TEST_TUNNEL_ORIGIN/"
 
 curl --silent --show-error --dump-header - --output /dev/null \
-  "$STAGE1_TUNNEL_ORIGIN/api/health"
+  "$TEST_TUNNEL_ORIGIN/api/health"
 ```
 
 Both requests must be denied or redirected to the account's
@@ -170,7 +172,7 @@ or policy before sharing the hostname.
 Verify authenticated CLI access separately:
 
 ```sh
-cloudflared access curl "$STAGE1_TUNNEL_ORIGIN/api/health"
+cloudflared access curl "$TEST_TUNNEL_ORIGIN/api/health"
 ```
 
 On first use, `cloudflared` opens a browser for Access authentication. The
@@ -181,10 +183,46 @@ not rotate the tunnel connector token solely because an Access transfer URL was
 exposed; they are different credentials.
 
 Authenticate separately on each physical test device. Confirm that the YouTube
-iframe's `origin` query value exactly matches `STAGE1_TUNNEL_ORIGIN`, then follow
-the complete [Stage 1 browser and device checklist](../stage-1-browser-matrix.md).
-Reset microphone permission between the grant and denial cases as directed by
-that checklist.
+iframe's `origin` query value exactly matches `TEST_TUNNEL_ORIGIN`, then follow
+the current-build checklist below. Reset microphone permission between its
+grant and denial cases.
+
+### Exercise the current build
+
+For every required browser and physical-device row from
+[ADR 0002](../decisions/0002-current-mainstream-browser-support.md):
+
+1. Open the authenticated root route. Confirm the app starts with **No video**,
+   no iframe, no autoplay, and Practice Mode unavailable.
+2. Paste the externally held HTTPS YouTube URL and select **Load video**. Confirm
+   **Video ready**, an unchanged application URL/history, a visible
+   `youtube-nocookie.com` iframe, native controls, and an iframe `origin` equal
+   to `TEST_TUNNEL_ORIGIN`.
+3. Put on headphones, enable Practice Mode, grant permission, and confirm the
+   live microphone indicator plus reported processing, sample-rate, and channel
+   settings. Use the operating-system privacy indicator as independent evidence.
+4. Play through native YouTube controls and confirm visible recording. Pause or
+   end playback and confirm asynchronous finalisation, a non-zero byte count, a
+   reported MIME type, and a playable latest recording. If natural buffering
+   occurs, confirm capture pauses and resumes without ending that attempt.
+5. Exercise **Reference**, **My recording**, restart, the floating comparison
+   dock, and `Alt+C`. Confirm app-initiated reference and learner playback do not
+   remain audible together. Complete another attempt and confirm it replaces
+   the previous latest recording.
+6. Submit an invalid URL, a repeated valid URL, and a second valid URL. Confirm
+   each submission replaces the player generation, disables Practice Mode, does
+   not mutate the app URL, ignores stale player callbacks, and never enables the
+   old recording in quick controls for a different source ID.
+7. Reset microphone permission, enable Practice Mode again, deny access, and
+   confirm a retryable error with no live microphone track.
+8. While recording, background the page and return. Confirm the player pauses,
+   Practice Mode stops, the in-progress attempt is not exposed as a completed
+   recording, and every microphone track and system privacy indicator turns off.
+   Repeat for refresh or page exit.
+9. Record exact browser, OS, and device versions, results, non-sensitive
+   diagnostics, and evidence locations in the external run log. Give every
+   anomaly an owner, resolution and retest, or an explicit support-decision
+   update.
 
 ### Shut down and clean up
 
@@ -198,7 +236,7 @@ At the end of the scheduled window:
 4. Clear the ephemeral shell state:
 
    ```sh
-   unset TUNNEL_TOKEN STAGE1_TUNNEL_ORIGIN
+   unset TUNNEL_TOKEN TEST_TUNNEL_ORIGIN
    ```
 
 5. Confirm that no connector remains and that the root service was not
@@ -220,5 +258,8 @@ At the end of the scheduled window:
 
 Do not use a bare `ngrok http` command or a committed reserved hostname; that
 would bypass the authentication requirement. If Cloudflare Tunnel is
-unavailable, use the authenticated, ephemeral ngrok procedure in the
-[Stage 1 browser and device checklist](../stage-1-browser-matrix.md#temporary-authenticated-mobile-endpoint).
+unavailable, stop and review ngrok's current authentication and ephemeral
+endpoint documentation before exposing the preview. The
+[Stage 1 ngrok procedure](../stage-1-browser-matrix.md#temporary-authenticated-mobile-endpoint-fallback)
+is preserved only as historical evidence and must not be treated as current
+configuration guidance.

@@ -5,6 +5,13 @@ Last updated: 2026-07-12
 
 Stage 1 was completed on 2026-07-11 after the production container and every required real browser and physical mobile-device row passed. The operator confirmed the results and reported no unresolved incompatibilities. Playwright's synthetic-media evidence remains complementary rather than a substitute for these real-media runs.
 
+> **Historical evidence:** this document records the fixed-video Stage 1 build
+> and its then-current commands, environment variable, UI labels, test count,
+> and findings. The repository now uses an in-page dynamic URL loader and
+> Practice Mode. Do not use the historical procedure below as current test
+> instructions; use the
+> [locally hosted current-build guide](testing/locally-hosted.md).
+
 The developer-prechecked video ID, its verification date, exact browser, operating-system and device versions, operator identity, diagnostics, and evidence locations are recorded in the external operator run log. Do not add the video ID, tunnel credentials, learner audio, or screenshots containing credentials to this repository.
 
 ## Automated evidence
@@ -35,7 +42,7 @@ Record exact browser, OS, and device versions, the external fixture-log referenc
 
 If one physical Apple device cannot cover both the required iOS and iPadOS rows, both devices remain required. Automated WebKit does not substitute for either physical row.
 
-## Local and container procedure
+## Historical Stage 1 local and container procedure
 
 1. Confirm that the selected test video is currently playable through the privacy-enhanced embed and record its ID and verification date outside the repository.
 2. Export that ID only in the current shell:
@@ -80,7 +87,17 @@ For each matrix row:
 
 The completed physical-device runs used the preferred authenticated Cloudflare Tunnel with Access workflow in the [locally hosted testing guide](testing/locally-hosted.md). The Access boundary, authenticated health route, exact HTTPS iframe origin, and shutdown were operator-confirmed on 2026-07-11.
 
-If Cloudflare Tunnel is unavailable during a future retest, expose the local container only for a scheduled mobile test window. ngrok's current Agent Endpoint flow accepts a separate Traffic Policy file through `--traffic-policy-file`; its `basic-auth` action rejects missing or invalid credentials with `401` when enforcement is enabled. See the official [Agent Endpoint Traffic Policy quickstart](https://ngrok.com/docs/traffic-policy/getting-started/agent-endpoints) and [`basic-auth` action reference](https://ngrok.com/docs/traffic-policy/actions/basic-auth).
+The fallback below is also part of the historical Stage 1 procedure. For a
+current-build retest, follow the current
+[locally hosted test guide](testing/locally-hosted.md).
+
+During the completed Stage 1 run, the ngrok Agent Endpoint flow accepted a
+separate Traffic Policy file through `--traffic-policy-file`; its `basic-auth`
+action rejected missing or invalid credentials with `401` when enforcement was
+enabled. The historical procedure exposed the local container only for a
+scheduled mobile test window. See the archived references to the official
+[Agent Endpoint Traffic Policy quickstart](https://ngrok.com/docs/traffic-policy/getting-started/agent-endpoints)
+and [`basic-auth` action reference](https://ngrok.com/docs/traffic-policy/actions/basic-auth).
 
 1. Generate a unique strong temporary password and store the username/password in a password manager or ephemeral shell variables outside the repository. The current action requires passwords of at least eight characters; use a substantially longer random value.
 2. With a restrictive umask, create a temporary policy such as `/tmp/shadowing-recorder-ngrok-policy.yml`. Insert the temporary credential directly into that ignored, short-lived file:
@@ -116,4 +133,10 @@ This tunnel is temporary test infrastructure. It is not a production hosting, au
 
 ## Final finding
 
-The implementation and synthetic automated coverage pass locally. Operator-confirmed production-container testing also passed for real codecs, permissions, playback, lifecycle behavior, every required current-stable desktop browser, physical iOS and iPadOS Safari, physical Android Chrome, and the authenticated Cloudflare tunnel. There are no unresolved Stage 1 incompatibilities, so Stage 1 is **complete**.
+The Stage 1 implementation and synthetic automated coverage passed locally.
+Operator-confirmed production-container testing also passed for real codecs,
+permissions, playback, lifecycle behavior, every required current-stable
+desktop browser, physical iOS and iPadOS Safari, physical Android Chrome, and
+the authenticated Cloudflare tunnel. There were no unresolved Stage 1
+incompatibilities, so Stage 1 is **complete**. This finding does not certify the
+later dynamic URL-loader build.

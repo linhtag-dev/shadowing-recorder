@@ -10,11 +10,21 @@ Last updated: 2026-07-12
 - [MVP technology stack and foundation plan](shadowing-recorder-mvp-technology-stack.md)
 - [YouTube embed and privacy rules](../rules/youtube-compliance-and-privacy.md)
 
-This plan defines delivery sequence. Completion is determined by the acceptance criteria in the MVP requirements, not by stage implementation alone.
+This plan defines delivery sequence and records implementation status. The root
+[README](../../../README.md) describes the current runnable build. Completion is
+determined by the acceptance criteria in the MVP requirements, not by stage
+implementation alone.
 
 ## Foundation: walking skeleton
 
-Completed locally on 2026-07-11. The npm workspace, React/Vite application, Hono walking-skeleton server, shared contracts, quality checks, three-engine browser smoke test, and single-service preview container are in place. The first hosted CI run remains to be confirmed after the scaffold is pushed. No YouTube, microphone, or recording behavior was included in this foundation. The Hono server and eligibility contracts are scaffold artifacts, not requirements of the accepted static production architecture.
+Completed locally on 2026-07-11. The npm workspace, React/Vite application,
+Hono walking-skeleton server, shared contracts, quality checks, three-engine
+browser smoke test, and single-service preview container are in place. GitHub
+Actions is configured to run the same checks; each pull request remains
+responsible for confirming its hosted run. No YouTube, microphone, or recording
+behavior was included in this foundation. The Hono server and eligibility
+contracts are scaffold artifacts, not requirements of the accepted static
+production architecture.
 
 ## Stage 1: Non-public recorder proof of concept
 
@@ -34,7 +44,12 @@ After the local container and fixed-video proof of concept work, select a static
 
 ## Stage 2: Public embed and policy foundation
 
-Status: In progress. The local URL loader, privacy-enhanced dynamic embed, load-generation replacement transaction, exact player-identity boundary, and source-labelled latest recording were completed on 2026-07-12. Consent, public terms/privacy links, official attribution, and the other launch-policy work in this stage remain pending; this build therefore remains non-public.
+Status: In progress. The local URL loader, privacy-enhanced dynamic embed,
+load-generation replacement transaction, exact player-identity boundary,
+source-labelled latest recording, and responsive video/Practice Mode setup were
+completed on 2026-07-12. Consent, public terms/privacy links, official
+attribution, explicit headphone confirmation, and the other launch-policy work
+remain pending; this build therefore remains non-public.
 
 - App terms, privacy policy, required links, and versioned acceptance gate.
 - Compliant `Shadowing Recorder` naming and official `Developed with YouTube` attribution.
@@ -48,25 +63,43 @@ Status: In progress. The local URL loader, privacy-enhanced dynamic embed, load-
 
 ## Stage 3: Automatic recording controller
 
-Status: In progress. The dynamic-video build loads the YouTube IFrame Player API and connects `PLAYING`, `BUFFERING`, `PAUSED`, and `ENDED` events to an explicitly enabled Practice Mode. The local video-load/player-identity boundary and post-permission reconciliation are complete; timing ownership, resource limits, consent/headphone confirmation, and the attempt-list implementation remain.
+Status: In progress. The dynamic-video build loads the YouTube IFrame Player
+API and connects `PLAYING`, `BUFFERING`, `PAUSED`, and `ENDED` events to an
+explicitly enabled Practice Mode. It implements post-permission reconciliation,
+attempt-scoped chunk ownership, a five-second finalisation watchdog,
+latest-recording playback, initial one-source comparison controls, `Alt+C`
+switching, and a responsive floating comparison dock. Full playback-pause
+confirmation, timing ownership, resource limits, consent/headphone confirmation,
+and the attempt list remain.
 
 Chrome's default microphone processing produced choppy learner audio during audible reference playback while muted Chrome playback and Safari on the same Mac were clean. The fixed-video capture now requests echo cancellation, noise suppression, and automatic gain control off and reports the browser-applied settings in diagnostics; this correction was implemented on 2026-07-12.
 
 - YouTube IFrame Player API integration. Initial fixed-video integration completed 2026-07-11.
-- Headphone confirmation and Practice Mode.
+- Practice Mode. Implemented for the latest-recording slice; explicit headphone
+  confirmation remains pending.
 - Serialized `requestingMic`, `armed`, `recording`, `buffering`, and `finalising` states. Initial fixed-video state flow completed 2026-07-11.
 - Post-permission reconciliation and expected-video identity checks. Playback reconciliation completed 2026-07-11; generation-scoped replacement and identity validation completed 2026-07-12.
-- Attempt-scoped recorder/chunk ownership and asynchronous finalisation. The latest recording now retains its immutable source video ID across replacement; the attempt list remains pending.
-- Draft/generation-scoped timers, operation-token cleanup, and a five-second finalisation watchdog.
-- One-audio-source playback interlock.
+- Attempt-scoped recorder/chunk ownership and asynchronous finalisation. The
+  latest recording retains its immutable source video ID across replacement;
+  the attempt list remains pending.
+- Five-second finalisation watchdog. Implemented. Buffering, heartbeat, timing,
+  duration, and playback-request timer ownership remains pending.
+- One-audio-source playback interlock. Initial reference/latest controls,
+  restart, `Alt+C`, and stop-the-other-source behavior are implemented. The
+  target two-second confirmed-player-pause protocol remains pending.
 - Attempt list with approximate, discontinuous, and uncertain timing labels.
 
 ## Stage 4: Limits and usability hardening
 
-- Loading and error states.
-- Mobile-browser testing.
-- Buffering pause/resume and timeout, seeking flags, ads, identity drift, rapid state changes, stale player callbacks, stale timers, and permission recovery.
+- Loading and mapped URL/player error states. Initial slice implemented.
+- Responsive setup and comparison-dock layout. Implemented in automation;
+  current dynamic-loader real-device testing remains pending.
+- Buffering pause/resume is implemented. The 30-second timeout, seeking flags,
+  ads, identity drift hardening, rapid state changes, stale timers, and
+  permission recovery remain.
 - Five-minute/10 MiB per-attempt limits and 50 MiB total accounting.
-- Visibility, page-exit, suspension-heartbeat, and microphone-track shutdown tests.
+- Initial visibility/page-exit interruption and microphone-track shutdown are
+  implemented. Full lifecycle finalisation semantics, suspension heartbeat, and
+  current-build real-device retesting remain.
 - Clear privacy copy and microphone lifecycle.
 - Static deployment checks, release-policy review, no-unexpected-first-party-request verification, and deployment-header verification.
