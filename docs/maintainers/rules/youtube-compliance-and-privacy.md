@@ -1,108 +1,211 @@
-# YouTube Compliance and Privacy Rules
+# YouTube Embed and Privacy Rules
 
-Status: Draft release-blocking rules  
-Last updated: 2026-07-11
+Status: Draft release-blocking rules
+Last updated: 2026-07-12
 
 ## Related documents
 
 - [MVP requirements](../requirements/shadowing-recorder-mvp.md)
 - [Technical design](../design/shadowing-recorder-technical-design.md)
 - [MVP implementation plan](../plans/shadowing-recorder-mvp-implementation.md)
+- [Static web deployment decision](../decisions/0004-static-web-deployment.md)
 
-These rules define the public-launch boundary for Shadowing Recorder. They must be reviewed against the current YouTube terms, developer policies, branding requirements, actual deployment behavior, and applicable privacy law before release and after every material API or data-flow change.
+These rules define the public-launch boundary for Shadowing Recorder. They must
+be reviewed against the current YouTube terms, developer policies, branding
+requirements, actual deployment behaviour, and applicable privacy law before
+release and after every material audience or data-flow change.
+
+## Audience boundary
+
+Shadowing Recorder is a general-audience, self-directed language-practice
+utility. It is not designed, marketed, or presented as child-directed or
+child-oriented:
+
+- The product does not target children or provide child-specific onboarding,
+  content curation, characters, rewards, advertising, or social features.
+- The app does not classify or recommend videos. A learner supplies the video
+  they want to practise with.
+- A learner choosing a video that YouTube designates Made for Kids does not
+  change the app's intended audience or its privacy behaviour.
+- Any future decision to target children, add child-oriented presentation, or
+  knowingly operate a child-directed service requires a new product, privacy,
+  consent, and legal review before release.
+
+This audience statement describes the product's design and positioning; it is
+not a substitute for reviewing the audience rules that apply in each launch
+jurisdiction.
+
+## No first-party tracking or operator data collection
+
+Shadowing Recorder does not use first-party or third-party analytics,
+advertising trackers, telemetry, tracking identifiers, accounts, or an
+application backend that receives learner activity. Application code does not
+intentionally send to the operator or persist remotely:
+
+- submitted YouTube URLs or video IDs;
+- player events, playback history, or timing samples;
+- microphone streams, encoded chunks, recordings, or derived speech data;
+- diagnostics, device identifiers, or browser identifiers; or
+- consent-marker contents or other locally held application state.
+
+In this documentation, `does not collect` means that the app operator does not
+receive or retain the data. The browser still processes information locally to
+provide the user-requested feature:
+
+- Microphone audio is held only in browser-managed, session-scoped memory or
+  temporary storage.
+- Completed recordings are exposed through session-local Blob URLs and are not
+  uploaded or intentionally persisted.
+- Recorder diagnostics are computed and displayed only in the current browser
+  session and exclude device and group identifiers.
+- A versioned consent marker may be stored in `localStorage`; it remains on the
+  learner's device and is never transmitted to the operator.
+
+Serving any web page necessarily exposes ordinary delivery metadata, such as an
+IP address and user agent, to the static host or CDN. Production hosting must
+disable provider analytics, avoid application access logs, minimise any
+unavoidable security-log retention, and disclose the host's actual processing.
+The learner supplies the YouTube URL through the page's input and explicitly
+selects `Load video`. The validated video ID remains in session-local browser
+state and is never copied into the application URL path, query, or fragment, so
+the static host does not receive the selection as part of a page request.
+
+Refreshing or closing the page removes the application's references and access
+to attempts. Browser cleanup of temporary backing storage is
+implementation-defined and is not promised to be immediate physical deletion.
+Any future save, upload, analytics, advertising, telemetry, sharing, or account
+feature requires a new data-flow design, updated disclosures, and renewed
+consent before release.
+
+## YouTube embed and third-party data flow
+
+The embedded YouTube player is a third-party service. It communicates directly
+with YouTube to render and validate the player, determine playability and
+content restrictions, serve media and advertisements where applicable, and
+process playback. Those requests are not first-party collection by Shadowing
+Recorder, but they remain a third-party data flow that the app must disclose.
+
+Every player must:
+
+- use [YouTube privacy-enhanced mode](https://support.google.com/youtube/answer/171780)
+  through `youtube-nocookie.com`;
+- set `autoplay=0` so playback begins only after learner interaction;
+- retain native controls, branding, links, and advertisements;
+- remain visible while playing; and
+- provide the required `origin` and Referer or equivalent API Client identity.
+
+Privacy-enhanced mode limits how an embedded view influences the viewer's
+YouTube browsing and advertising experience. It does not make the player an
+offline or first-party component and does not eliminate the need to disclose
+YouTube's own data handling.
+
+## No YouTube Data API integration
+
+The MVP does not integrate the YouTube Data API, create a Google Cloud API key,
+or send a candidate video ID to an application backend. URL processing is local
+to the browser. After recognising a supported YouTube URL and validating its
+11-character video ID, the app creates the privacy-enhanced player and relies on
+the IFrame Player API to report invalid, unavailable, private, age-restricted,
+or embedding-disabled content.
+
+The app does not query or infer a video's Made for Kids designation, live
+status, embeddability metadata, category, suitability, or audience. It applies
+the same no-tracking and no-operator-collection behaviour to every selected
+video.
+
+The current YouTube Developer Policies contain mandatory wording about looking
+up each embedded video's Made for Kids status, while the linked implementation
+guide describes checking when the developer is unsure. The product owner has
+deliberately selected a static, no-Data-API architecture and uniform
+privacy-minimising behaviour rather than a per-video metadata service. This
+decision and the source-language discrepancy must remain visible in release
+review; this document does not claim that the architecture overrides YouTube's
+terms. A written clarification or a future policy change may require this
+decision to be revisited.
+
+## Required notice and consent
+
+Before enabling URL loading, iframe creation, or Practice Mode, require the
+learner to accept the current app privacy policy and app terms. Store only a
+JSON marker such as `shadowingRecorder.consent`, containing `policyVersion` and
+`acceptedAt`, in local browser storage. `Forget consent on this device` first
+disables Practice Mode and clears pending player loads, then removes the marker
+and returns to the consent gate.
+
+The app terms must link to the [YouTube Terms of Service](https://www.youtube.com/t/terms)
+and state that the app's YouTube features are also subject to them. The privacy
+policy must remain prominently accessible and, at minimum:
+
+- state that Shadowing Recorder is general-audience and is not child-directed
+  or child-oriented;
+- state that the app has no analytics, advertising tracking, telemetry,
+  accounts, or operator-side collection of URLs, playback activity, or learner
+  audio;
+- distinguish application data handling from ordinary static-host delivery
+  metadata and describe any unavoidable infrastructure logs or retention;
+- explain the local microphone, Blob, diagnostics, and consent-marker handling;
+- state that the app uses YouTube API Services and link to the
+  [Google Privacy Policy](https://policies.google.com/privacy);
+- describe the information the embedded player sends directly to YouTube,
+  including playback data, browser/device storage or similar technologies, and
+  third-party advertisements where applicable; and
+- explain local deletion, page-refresh deletion, microphone lifecycle, the
+  absence of Google account authorization, and how to contact the operator
+  about privacy questions.
 
 ## Product name and YouTube attribution
 
-- The application name is `Shadowing Recorder`. Do not use `YouTube`, `YT`, `You-Tube`, or a derivative in the overall app name, domain, feature names, company name, app icon, or product logo.
-- It is acceptable to describe the app separately as working with YouTube or to label the URL field as accepting a YouTube URL.
-- Removing YouTube functionality would make this application nonfunctional, so pages containing the player or other YouTube API functionality should display the official `Developed with YouTube` logo supplied by YouTube.
-- Place the attribution near the player/API implementation, visually separate from the `Shadowing Recorder` name and description. It must not be the page's most prominent element or be combined into an app-name lockup.
-- Use an official, unmodified asset with the required contrast and minimum size. Make it clickable and link it to the selected video on YouTube or another relevant YouTube content/component. Do not recreate the logo as styled text.
+- The application name is `Shadowing Recorder`. Do not use `YouTube`, `YT`,
+  `You-Tube`, or a derivative in the product, domain, feature, company, app
+  icon, or product logo name.
+- It is acceptable to describe the app separately as working with YouTube or to
+  label the URL field as accepting a YouTube URL.
+- Pages containing the player should display the official `Developed with
+  YouTube` logo supplied by YouTube.
+- Place the attribution near the player, visually separate from the Shadowing
+  Recorder name. Use an official, unmodified asset with the required contrast
+  and minimum size, and link it to the selected video or other relevant YouTube
+  content.
 
-## Pre-embed eligibility service
+## YouTube content boundary
 
-Public deployment requires one Google Cloud API project dedicated to this API Client, with YouTube Data API v3 enabled. Keep its credential in server-side configuration or a secret manager, restrict it to the required API and deployment environment, and never ship it in frontend source or commit it to the repository. This read-only lookup does not require the learner to sign in to Google.
+The application uses YouTube only through its visible embedded player. It must
+not:
 
-After local URL parsing and before creating any YouTube iframe, send only the extracted video ID to an HTTPS application endpoint. The endpoint calls [`videos.list`](https://developers.google.com/youtube/v3/docs/videos/list) with that ID and `part=id,status,snippet`, then returns a narrow eligibility result. The public MVP does not cache API Data persistently or use a stale result as a fallback.
+- download, extract, proxy, cache, or separately store YouTube audio or video;
+- capture the YouTube stream as the learner's reference file;
+- hide or replace required player controls, branding, links, or advertisements;
+- play YouTube content through a hidden or background-only player; or
+- claim ownership of embedded content.
 
-| Lookup result | Eligibility action |
-| --- | --- |
-| Exactly one matching item, `status.madeForKids === false`, `status.embeddable === true`, and `snippet.liveBroadcastContent === "none"` | `eligible`; the browser may create an iframe for that exact ID. |
-| `status.madeForKids === true` | `madeForKids`; do not create the iframe in this MVP. |
-| `snippet.liveBroadcastContent` is `live` or `upcoming` | `liveOrUpcoming`; do not create the iframe. |
-| No matching item or explicitly non-embeddable item | `unavailable`; do not create the iframe. |
-| Missing any required status field, timeout, network failure, malformed response, API error, rate limit, or quota exhaustion | `unknown`; fail closed, do not create the iframe, and offer a retry. |
+The microphone records the learner independently. Headphones are required to
+avoid intentionally capturing YouTube audio through the microphone.
 
-The endpoint must apply per-client rate limiting, coalesce simultaneous checks for the same ID, enforce a short timeout, and expose quota/error metrics and an operational alert before daily quota is exhausted. It must distinguish retryable service failure from an invalid URL, return no credential details, and never receive learner audio. Quota exhaustion is an unavailable dependency, not permission to bypass the check.
+## Public-launch checklist
 
-## Privacy and permissions
-
-### Learner recordings
-
-By default:
-
-- Audio remains in browser-managed, session-scoped local storage, which may be backed by memory or temporary browser storage.
-- The application does not upload or intentionally persist the audio.
-- Refreshing or closing the page removes the application's references and access to attempts. Browser cleanup of underlying temporary data is implementation-defined and is not promised to be immediate physical deletion.
-- The microphone stream is stopped when Practice Mode is disabled, the page is hidden or exited, player identity changes, or a fatal controller error occurs.
-- The application payload sent to the eligibility endpoint contains only the candidate YouTube video ID—not microphone audio, chunks, Blobs, or derived speech data. Ordinary network metadata and any operational logging must be disclosed separately.
-
-The UI must state this plainly. Any future save, upload, analytics, or sharing feature requires a separate consent and retention design and a new policy acceptance when the described data use changes.
-
-### Required notice and consent
-
-Before enabling URL loading, eligibility lookup, iframe creation, or practice, require the learner to affirmatively accept the current version of the app privacy policy and app terms. Store a JSON marker in `localStorage` under an app-owned key such as `shadowingRecorder.consent`, containing only `policyVersion` and `acceptedAt`; it intentionally persists across sessions and never contains learner audio. If the policy version changes, require acceptance again. `Forget consent on this device` first disables Practice Mode and clears pending loads, then removes the marker and returns to the consent gate. Declining leaves only the static explanatory, privacy, and terms pages available.
-
-The app terms must link to the [YouTube Terms of Service](https://www.youtube.com/t/terms) and state that use of the app's YouTube features is also subject to them. The privacy policy must remain prominently accessible and, at minimum:
-
-- state that the app uses YouTube API Services;
-- link to the [Google Privacy Policy](https://policies.google.com/privacy);
-- describe the candidate video ID sent through the app server to the YouTube Data API and any operational request logging or retention;
-- disclose the versioned `localStorage` consent marker, its fields, cross-session persistence, and `Forget consent on this device` deletion method;
-- describe the information the embedded player shares with YouTube, including playback data, device/browser storage or similar technologies, and third-party advertisements where applicable;
-- distinguish those third-party flows from learner microphone audio, which remains local in the MVP; and
-- explain local deletion, page-refresh deletion, microphone lifecycle, the absence of Google account authorization, and how to contact the operator about privacy questions.
-
-This MVP is specified as a general-audience, non-child-directed API Client and rejects Made for Kids videos. Consent to this privacy policy is not a substitute for parental consent or a child-directed product design.
-
-Rejecting a Made for Kids result before iframe creation means the MVP creates no player or app-side tracking for that video. Any future decision to support such videos must first turn off tracking with respect to those players and establish a data-collection design that complies with applicable child-privacy law; that work is outside this MVP.
-
-### YouTube embed
-
-An embedded YouTube player communicates with YouTube even before playback to render and validate the player, and additional data can be shared when playback begins. The application must disclose that third-party embed and the distinction between the app's data handling and YouTube's.
-
-Use [YouTube privacy-enhanced mode](https://support.google.com/youtube/answer/171780) through `youtube-nocookie.com` for the public MVP to limit how an embedded view influences the viewer's YouTube browsing experience. It does not make the player an offline or first-party component and does not remove the notice, consent, Made for Kids lookup, or applicable-law obligations.
-
-## YouTube policy boundary
-
-The application uses YouTube only through its visible embedded player. It must not:
-
-- Download or extract the video's audio or video.
-- Separate the audio from the video.
-- Capture the YouTube stream as the learner's reference file.
-- Hide or replace required player controls, branding, or advertisements.
-- Play the YouTube content through a hidden or background-only player.
-- Claim ownership of the embedded content.
-
-The microphone records the learner independently. Headphones are required specifically to avoid intentionally recording the YouTube audio through the microphone.
-
-The current [YouTube Developer Policies](https://developers.google.com/youtube/terms/developer-policies) are an MVP architecture and release requirement, not a later optional review. Public launch is blocked until all of the following are true:
-
-- The dedicated API project, restricted server-side credential, quota monitoring, rate limiting, and fail-closed eligibility endpoint are operational.
-- Every video ID for which the application creates an iframe is checked through the documented [Made for Kids lookup](https://developers.google.com/youtube/v3/guides/made_for_kids_status) first; the public MVP refuses Made for Kids and unknown results. Any cross-origin in-player navigation to an unchecked ID triggers the identity-drift teardown and cannot be adopted in place.
-- Terms, privacy disclosures, affirmative versioned consent, YouTube Terms, and Google Privacy links are deployed and match actual logging and data flows.
-- The operator has confirmed and documented that the API Client is not child-directed. A change in audience or support for Made for Kids content blocks release pending a new compliance design.
-- The visible player preserves YouTube functionality and branding, identifies the API Client through `origin` and Referer/equivalent identity, and handles error `153`.
-- The product is named `Shadowing Recorder`, with no YouTube name or variant in its overall identity. The official `Developed with YouTube` attribution is deployed near API functionality, separate from the app name, using an unmodified clickable asset in accordance with the [YouTube Branding Guidelines](https://developers.google.com/youtube/terms/branding-guidelines).
-- A release owner has checked the current YouTube terms, developer-policy revision history, branding requirements, and applicable privacy law before initial launch and every material API/data-flow change.
+- The deployed product and privacy copy state the general-audience,
+  non-child-directed and non-child-oriented positioning.
+- No analytics, advertising trackers, telemetry, tracking identifiers, account
+  system, or application endpoint receives user activity or learner audio.
+- Terms, privacy disclosures, affirmative versioned consent, YouTube Terms, and
+  Google Privacy links are deployed and match the actual local and third-party
+  data flows.
+- The visible player uses `youtube-nocookie.com`, preserves YouTube
+  functionality and branding, uses `autoplay=0`, identifies the API Client
+  through `origin` and Referer or equivalent identity, and handles error `153`.
+- The official `Developed with YouTube` attribution is deployed separately from
+  the app name in accordance with the
+  [YouTube Branding Guidelines](https://developers.google.com/youtube/terms/branding-guidelines).
+- A release owner has reviewed the current YouTube terms, developer-policy
+  revision history, the documented no-Data-API decision, actual browser network
+  behaviour, and applicable privacy law.
 
 ## References
 
 - [YouTube Developer Policies](https://developers.google.com/youtube/terms/developer-policies)
-- [YouTube Branding Guidelines](https://developers.google.com/youtube/terms/branding-guidelines)
+- [YouTube API Terms revision history](https://developers.google.com/youtube/terms/revision-history)
 - [Finding the Made for Kids status of a video](https://developers.google.com/youtube/v3/guides/made_for_kids_status)
-- [YouTube Data API `videos.list`](https://developers.google.com/youtube/v3/docs/videos/list)
-- [YouTube Data API video resource](https://developers.google.com/youtube/v3/docs/videos)
+- [YouTube Branding Guidelines](https://developers.google.com/youtube/terms/branding-guidelines)
 - [YouTube Terms of Service](https://www.youtube.com/t/terms)
 - [Google Privacy Policy](https://policies.google.com/privacy)
 - [YouTube privacy-enhanced embedding](https://support.google.com/youtube/answer/171780)

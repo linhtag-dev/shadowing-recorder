@@ -1,218 +1,237 @@
 # Shadowing Recorder MVP Technology Stack
 
 Status: Active
-
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Related documents
 
 - [MVP requirements](../requirements/shadowing-recorder-mvp.md)
 - [Technical design](../design/shadowing-recorder-technical-design.md)
 - [MVP implementation plan](shadowing-recorder-mvp-implementation.md)
-- [YouTube compliance and privacy rules](../rules/youtube-compliance-and-privacy.md)
-- [Single-service deployment topology decision](../decisions/0001-single-service-deployment-topology.md)
+- [YouTube embed and privacy rules](../rules/youtube-compliance-and-privacy.md)
+- [Static web deployment decision](../decisions/0004-static-web-deployment.md)
 - [Current mainstream browser support decision](../decisions/0002-current-mainstream-browser-support.md)
 - [Canonical application origin decision](../decisions/0003-canonical-application-origin.md)
 
-This document records the proposed technology stack and the foundation work that should precede feature implementation. The implementation plan owns the overall delivery sequence; this document owns the initial stack and scaffolding recommendation.
+This document owns the MVP stack and foundation direction. The implementation
+plan owns delivery order; the technical design owns runtime behaviour.
 
 ## Decision summary
 
-Project scaffolding should be the first implementation task, following a short architecture-baseline checkpoint that records the production topology, browser-support policy, and origin strategy. The production topology is one containerized Node.js service serving both the built web application and Hono API at `https://htag.uk`. Official browser support is limited to current stable releases of the mainstream browsers named below.
+Shadowing Recorder is a static, browser-only product. React and Vite produce the
+deployment artifact; a static host serves it over HTTPS from the canonical
+origin. Runtime product behaviour uses browser APIs and the YouTube IFrame
+Player API directly. It does not use the YouTube Data API, an API credential, a
+runtime application backend, server-side rendering, or a database.
 
-Hosting-provider selection and production operational infrastructure are deliberately deferred. They do not block scaffolding, a locally runnable container, or the non-public fixed-video YouTube and microphone proof of concept. They become release gates before the application is deployed to shared staging or exposes the arbitrary-video eligibility endpoint publicly.
-
-The scaffolding task should produce a tested walking skeleton rather than only generated framework files. Microphone recording and YouTube integration begin in the subsequent non-public proof-of-concept stage.
+The product is general-audience and is not designed, marketed, or presented as
+child-directed or child-oriented. It has no analytics, advertising trackers,
+telemetry, accounts, or operator-side collection of selected URLs, playback
+activity, microphone audio, recordings, diagnostics, or consent state.
 
 ## Implementation status
 
-The walking-skeleton scaffold was implemented and locally verified on 2026-07-11. The repository now contains the npm workspaces, shared runtime contracts, accessible application shell, same-origin health route and development proxy, static quality and test configuration, production Node.js server, and multi-stage Docker image described below.
+The walking skeleton was implemented and locally verified on 2026-07-11 before
+the static deployment decision. It includes npm workspaces, a React/Vite app,
+shared eligibility-contract scaffolding, a Hono health/static-preview server,
+quality checks, Playwright smoke tests, and a production-style Node container.
 
-Local verification covers a clean lockfile install, the root `npm run check` workflow, the built-service Playwright smoke test in Chromium, Firefox, and WebKit, the development `/api/*` proxy, and a healthy locally running production container with no credential. The GitHub Actions workflow mirrors these commands; its first hosted run remains to be confirmed. Step 2 was completed on 2026-07-11, including the fixed-video implementation, synthetic automation, real production-container media test, and required desktop and physical-device matrix.
+Those server and eligibility pieces are historical scaffold, not requirements
+of the accepted production architecture. They may remain temporarily for local
+preview and regression testing, but new product behaviour must not depend on
+them. Their removal or simplification should be handled as a focused
+implementation change with corresponding test and README updates.
 
-## Proposed stack
+Stage 1's fixed-video recorder, synthetic automation, production-container
+real-media run, and required desktop and physical-device matrix were completed
+on 2026-07-11.
+
+## Stack
 
 | Layer | Choice |
 | --- | --- |
-| Production and CI runtime | Node.js 24 LTS, pinned in the repository |
+| Development and CI runtime | Node.js 24 LTS, pinned in the repository |
 | Package management | npm workspaces with a committed lockfile |
 | Frontend | React, Vite, and strict TypeScript |
-| Client routing | React Router |
+| Client routing | React Router with static-host SPA fallback |
 | Styling | CSS Modules and CSS custom properties |
-| Runtime orchestration | XState v5 for the video-load and Practice Mode state machines |
-| Eligibility API | Hono using Web Standard `Request`, `Response`, and `fetch` APIs |
-| Boundary validation | Zod for request, upstream-response, and client-response schemas |
-| Unit and integration tests | Vitest with fake clocks and injected browser adapters |
+| Runtime orchestration | XState v5 for player-load and Practice Mode state machines |
+| Video integration | YouTube IFrame Player API using `youtube-nocookie.com` |
+| Local validation | Zod and explicit TypeScript parsing at browser boundaries |
+| Unit and component tests | Vitest with fake clocks and injected browser adapters |
 | End-to-end tests | Playwright for Chromium, Firefox, and WebKit |
-| Static quality checks | TypeScript, ESLint, and Prettier |
+| Static quality checks | TypeScript, ESLint, Prettier, and production build |
 | Continuous integration | GitHub Actions |
-| Application persistence | No database; only the versioned consent marker uses `localStorage` |
+| Production delivery | Static HTTPS hosting at the canonical origin |
+| Application persistence | No database; only a local consent marker and session-scoped browser Blobs |
 
-Exact dependency versions should be selected at scaffolding time and pinned by the lockfile. Node.js 24 is the runtime baseline because it is an LTS release; a newer Current release should not become the production baseline until it enters LTS and the project deliberately upgrades.
+Exact dependency versions are pinned by the lockfile. Node is a build, test, and
+local-tooling requirement; it is not a production application-server
+requirement.
 
 ## Architecture rationale
 
-### React and Vite
+### Browser-only product
 
-The application is primarily a browser application. Its core capabilities depend on `getUserMedia`, `MediaRecorder`, object URLs, page-lifecycle events, and the YouTube IFrame Player API. It does not require server-rendered user data, server components, or a general-purpose backend framework.
+The core capabilities depend on `getUserMedia`, `MediaRecorder`, object URLs,
+page-lifecycle events, and the YouTube IFrame Player API. All learner-specific
+state can remain on the learner's device. The product does not need server user
+data, server components, secrets, durable storage, or general-purpose backend
+logic.
 
-React provides a familiar component model, while Vite supplies a small development and production build layer without imposing server-rendering boundaries on browser-only code. A full-stack rendering framework such as Next.js would add conventions that the MVP does not currently need.
+React provides the component model, and Vite supplies the build and development
+layer without imposing a server-rendering boundary. A full-stack rendering
+framework would add conventions and infrastructure that the MVP does not need.
+
+### No YouTube Data API
+
+The browser parses supported YouTube URLs, validates the extracted 11-character
+video ID, and constructs a visible privacy-enhanced player. It does not query
+Made for Kids, live, embeddability, category, suitability, or audience
+metadata. YouTube reports playability failures through the IFrame Player API.
+
+There is consequently no API key, quota, secret manager, metadata proxy, rate
+limiter, request coalescer, or eligibility outage in the production
+architecture. The policy interpretation and review boundary are recorded in
+the [YouTube embed and privacy rules](../rules/youtube-compliance-and-privacy.md)
+and [ADR 0004](../decisions/0004-static-web-deployment.md).
 
 ### Headless controller and XState
 
-The recording behavior must not be implemented as loosely related React state and effects. The technical design requires serialized events, mutually exclusive controller states, asynchronous finalisation, generation guards, operation-owned timers, and stale-callback suppression.
+The recording behaviour must not be implemented as loosely related React state
+and effects. The technical design requires serialized events, mutually
+exclusive controller states, asynchronous finalisation, generation guards,
+operation-owned timers, and stale-callback suppression.
 
-Use XState only for runtime orchestration, not for all presentation state. At minimum, define separate actors or machines for:
+Use XState only for runtime orchestration, not all presentation state. At
+minimum, separate ownership for:
 
-- video URL parsing and eligibility-load transaction ownership;
+- local URL parsing, player construction, replacement, and identity;
 - Practice Mode and microphone lifecycle; and
-- attempt-scoped recording/finalisation where child-actor ownership proves useful.
+- attempt-scoped recording and finalisation where child actors prove useful.
 
-Browser capabilities should be injected behind narrow TypeScript interfaces, such as a player adapter, recorder factory, microphone provider, clock, and object-URL provider. This keeps controller tests deterministic. XState's event queue does not replace the generation, draft-identity, expected-video, and operation-token guards required by the technical design.
+Browser capabilities should be injected behind narrow TypeScript interfaces,
+including the player adapter, recorder factory, microphone provider, clock, and
+object-URL provider. This keeps controller tests deterministic. XState's event
+queue does not replace generation, draft-identity, expected-video, and
+operation-token guards.
 
-### Minimal Hono API
+### Privacy boundary
 
-The server has one narrow responsibility for the MVP: validate a candidate video ID through the YouTube Data API and return a fail-closed eligibility result. Hono is sufficient for this boundary and keeps the handler based on portable Web APIs.
+The app makes no first-party runtime request containing learner activity. Local
+microphone audio, chunks, Blob URLs, timing samples, diagnostics, and consent
+state never cross an application-server boundary because no such product
+boundary exists. Static hosting may still process ordinary asset-delivery
+metadata; disable provider analytics, minimise log retention, and disclose any
+unavoidable infrastructure processing.
 
-The public route should be same-origin, for example `POST /api/video-eligibility`. The server must own the YouTube credential, upstream timeout, response validation, rate limiting, same-ID request coalescing, structured operational errors, and quota metrics. No learner-audio type or code path should exist in the API application.
+The YouTube iframe is a disclosed third-party boundary. It communicates
+directly with YouTube and must use privacy-enhanced mode, `autoplay=0`, native
+controls, the canonical `origin`, and an appropriate Referer or equivalent
+client identity.
 
-The containerized Node.js service serves both the Vite production assets and the API. A platform proxy or CDN may sit in front of the service, but the application remains one deployable service behind one public origin.
+## Repository direction
 
-### Shared contracts
-
-Place the eligibility request, response, and error schemas in a small shared package. Types inferred from runtime schemas may be consumed by both applications, but the browser must still validate the response at runtime. Do not share server configuration or credential-handling modules with the frontend workspace.
-
-## Proposed repository shape
+The current repository remains an npm workspace while the server scaffold is
+retired deliberately:
 
 ```text
 apps/
-  web/
-    src/
-      app/
-      browser-adapters/
-      components/
-      controller/
-  api/
-    src/
-      eligibility/
-      middleware/
+  web/                 React/Vite product and browser tests
+  api/                 temporary health/static-preview scaffold
 packages/
-  contracts/
+  contracts/           temporary shared eligibility scaffold
 tests/
-  e2e/
+  e2e/                 built-application browser smoke tests
 ```
 
-Use npm workspaces and ordinary root scripts. A monorepo task runner is unnecessary for the initial repository size.
+Browser code must not import the API workspace. No learner-audio, selected-URL,
+player-event, diagnostic, or consent type belongs in a server workspace or
+network contract. A later cleanup may collapse the workspace if the remaining
+package boundaries no longer justify it.
 
-## Initial execution sequence
+## Execution sequence
 
 ### Step 0: Architecture baseline
 
-Before generating the applications:
+1. Use the accepted static-web topology in
+   [ADR 0004](../decisions/0004-static-web-deployment.md).
+2. Use the accepted rolling browser-support policy: current stable desktop
+   Chrome, Edge, Firefox, and Safari, plus current stable iOS/iPadOS Safari and
+   Android Chrome.
+3. Use `https://htag.uk` as the canonical production origin. Redirect
+   alternate production hostnames before application behaviour begins.
 
-1. Use the accepted production topology: one containerized Node.js service serves both the built Vite application and Hono API under one public origin.
-2. Apply the accepted rolling browser-support policy: current stable desktop Chrome, Edge, Firefox, and Safari, plus current stable iOS/iPadOS Safari and Android Chrome. Record the exact versions and physical devices exercised for each release.
-3. Use the accepted canonical production origin `https://htag.uk`. In local development, expose the web application and proxied `/api/*` routes through one localhost origin.
+Browsers outside this set, prerelease browsers, and older versions may work but
+are not explicitly supported or release-blocking.
 
-Browsers outside this mainstream set, pre-release browsers, and versions older than the current stable release may work but are not explicitly supported or release-blocking. Do not add compatibility code solely for those environments without a demonstrated product need.
+### Step 1: Walking skeleton
 
-The accepted decisions are recorded as short architecture decision records. Scaffolding should preserve portable boundaries and must not assume an unselected hosting provider.
+Completed on 2026-07-11. The original scaffold intentionally proved build,
+test, preview, container, and workspace boundaries before the static production
+decision. Preserve its evidence while removing obsolete runtime pieces in a
+separate change.
 
-### Step 1: Walking-skeleton scaffolding
+### Step 2: Browser recorder proof of concept
 
-Create the workspace with:
+Completed on 2026-07-11. The proof validated visible YouTube playback alongside
+microphone recording, recorder event ordering, supported output, permissions,
+page lifecycle, and physical mobile behaviour.
 
-- pinned Node.js and npm requirements;
-- React/Vite web and Hono API applications;
-- shared eligibility contracts;
-- strict TypeScript configurations with browser/server boundaries;
-- ESLint and Prettier configuration;
-- Vitest projects for controller, component, contract, and API tests;
-- Playwright configuration for Chromium, Firefox, and WebKit;
-- a placeholder accessible application shell;
-- a same-origin `/api/health` route and development proxy;
-- environment validation and a safe `.env.example` without credentials;
-- a production Dockerfile in which the Node.js service serves the built web application and API;
-- production build, local preview, and local container-run commands; and
-- continuous integration for clean install, formatting, linting, type checking, tests, and builds.
+### Step 3: Static production foundation
 
-No YouTube iframe, Data API credential, microphone request, or recording behavior belongs in this task.
+Before public deployment:
 
-### Step 2: Non-public browser proof of concept
+1. Select a static host that supports HTTPS, the canonical hostname, redirects,
+   cache control, security headers, and SPA fallback.
+2. Verify the built app makes no first-party runtime request containing user
+   activity and contains no YouTube Data API credential.
+3. Verify `youtube-nocookie.com`, `autoplay=0`, native controls, `origin`, and
+   Referer behaviour against the deployed origin.
+4. Publish the terms, privacy policy, audience statement, consent gate, and
+   YouTube/Google links required by the privacy rules.
+5. Define static-asset rollback and policy-review ownership.
 
-Proceed with the fixed-video recorder proof of concept already described in the MVP implementation plan. Keep it on localhost or restricted development access. Use it to validate the riskiest real-browser assumptions before building the complete controller:
-
-- simultaneous visible YouTube playback and microphone recording;
-- `MediaRecorder` start, pause, resume, stop, and final event ordering;
-- supported MIME types and playable output across target browsers;
-- permission behavior and user-gesture restrictions; and
-- mobile Safari and Android lifecycle behavior.
-
-The spike may use simple explicit start/stop controls, but browser capabilities should already sit behind the adapters intended for the production controller. Before this step exits, run the fixed-video proof of concept from the locally built production container and verify that the iframe receives the actual localhost origin. Because the video is fixed and developer-prechecked and the environment is non-public, this step requires neither a YouTube Data API credential nor the production eligibility safeguards.
-
-### Step 3: Deferred production deployment checkpoint
-
-After the local container and fixed-video proof of concept work, and before shared staging or public eligibility traffic:
-
-1. Select and record the hosting provider for the accepted single-container topology.
-2. Decide how the deployment supplies and rotates the server-only YouTube Data API credential.
-3. Select distributed or platform-backed per-client rate limiting and a multi-replica-safe same-ID request-coalescing design.
-4. Select quota/error metrics, operational alerts, log handling, and retention.
-5. Validate HTTPS and DNS provisioning for `htag.uk`, egress controls, scaling behavior, and expected cost.
-
-Provider-neutral eligibility contracts, handlers, deterministic tests, and local process implementations may be developed before this checkpoint. Process-local safeguards are acceptable for local testing but do not satisfy the shared-staging or public-launch requirements.
-
-## Scaffolding exit criteria
-
-Scaffolding is complete when all of the following are true:
-
-- A clean checkout can install dependencies from the lockfile using the pinned LTS runtime.
-- One root command runs formatting checks, linting, type checking, unit tests, and production builds.
-- The web application can call the local same-origin health endpoint in development and production preview modes.
-- The production container image builds and serves the web application and `/api/health` locally without a YouTube credential.
-- Server-only environment variables cannot be imported into or exposed by the frontend build.
-- A representative shared-contract test rejects malformed eligibility responses.
-- Playwright can start the built application and complete a smoke test in Chromium, Firefox, and WebKit.
-- CI performs the same checks without requiring a YouTube credential.
-- The README explains setup, commands, environment variables, application boundaries, and the non-public status of the upcoming recorder spike.
-
-## Test strategy
+## Verification strategy
 
 Use three complementary layers:
 
-1. Deterministic controller and API tests use fake players, recorders, media streams, tracks, clocks, lifecycle events, and upstream YouTube responses. These tests own the race-condition and stale-callback acceptance cases.
-2. Playwright tests exercise user-visible state, request ordering, permissions where automation permits, player-adapter behavior, accessibility, and multi-browser smoke coverage. Most automated player tests should use a controlled fake IFrame adapter rather than depend on live YouTube behavior.
-3. Restricted staging and real-device sessions validate the actual YouTube IFrame API, microphone, codecs, permissions, playback interlocks, mobile Safari, Android, and deployment headers. These results should be recorded in a release checklist.
+1. Deterministic controller and component tests use fake players, recorders,
+   media streams, tracks, clocks, lifecycle events, and object URLs. They own
+   race-condition, player-replacement, and stale-callback coverage.
+2. Playwright tests exercise user-visible state, URL validation, player errors,
+   permissions where automation permits, accessibility, privacy assertions, and
+   three-engine smoke coverage. Most player tests use a controlled fake adapter.
+3. Restricted real-device sessions validate the actual YouTube IFrame API,
+   microphone, codecs, permissions, playback interlocks, mobile lifecycle, and
+   deployment headers.
 
-Live YouTube and real-microphone checks cannot be the only automated acceptance mechanism because they are external, stateful, and difficult to reproduce. Conversely, simulated browser tests cannot replace the required real-device matrix.
+Add an automated production-bundle or browser-network assertion that rejects
+unexpected first-party analytics, telemetry, API, selected-video, and audio
+requests. Live YouTube and real-microphone checks complement but do not replace
+deterministic automation.
 
 ## Deliberate exclusions
 
-Do not add the following without a demonstrated need:
+Do not add the following without a demonstrated need and a superseding privacy
+and architecture review where applicable:
 
+- YouTube Data API integration or an API credential;
+- a runtime application backend, serverless function, database, ORM, account
+  system, or durable learner-audio storage;
+- analytics, advertising trackers, telemetry, or server-side activity logging;
 - Redux or another general-purpose client store;
-- a database, ORM, account system, or durable learner-audio storage;
 - a large component library or CSS framework;
 - a monorepo task runner;
 - GraphQL;
-- a service worker or offline mode;
-- server-side rendering; or
-- analytics that would alter the documented privacy data flow.
-
-## Deferred production deployment details
-
-The production topology and origin are selected: one containerized Node.js service serves the built Vite application and Hono API at `https://htag.uk`. The hosting platform and production operational infrastructure are intentionally deferred until after the locally containerized fixed-video proof of concept. Google Cloud Run is the initial candidate because it aligns naturally with the Google Cloud project, YouTube Data API credential, quota visibility, secret management, and HTTPS requirements, but rate limiting, request coalescing, egress restrictions, and cost must be validated before it becomes the recorded provider decision.
-
-These open decisions do not block local development or the non-public proof of concept. They block shared staging and public eligibility traffic.
-
-A provider that requires splitting the static application from a function or worker does not match the accepted topology. Adopting that model later would require superseding the topology decision as well as providing an explicit plan for platform-backed rate limiting, request coalescing, secrets, metrics, quota alerts, and local parity.
+- a service worker or offline mode; or
+- server-side rendering.
 
 ## Technical references
 
 - [Node.js releases](https://nodejs.org/en/about/previous-releases)
 - [Vite guide](https://vite.dev/guide/)
 - [XState actors](https://stately.ai/docs/actors)
-- [Hono Web Standards](https://hono.dev/docs/concepts/web-standard)
-- [Hono on Node.js](https://hono.dev/docs/getting-started/nodejs)
-- [Vitest Browser Mode](https://main.vitest.dev/guide/browser/)
+- [Vitest](https://vitest.dev/)
 - [Playwright browsers](https://playwright.dev/docs/browsers)
+- [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference)

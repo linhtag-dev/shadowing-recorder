@@ -4,6 +4,14 @@ Shadowing Recorder is a browser-first language practice tool. The current non-pu
 
 This build intentionally has no arbitrary URL input, eligibility request, YouTube Data API credential, consent flow, or learner-audio server route.
 
+## Audience and privacy boundary
+
+Shadowing Recorder is a general-audience language-practice utility. It is not designed, marketed, or presented as child-directed or child-oriented.
+
+The app has no analytics, advertising trackers, telemetry, accounts, or operator-side collection of selected videos, player activity, microphone audio, recordings, diagnostics, or consent state. Microphone processing and recordings stay in the current browser session. The embedded YouTube player is a third-party service and communicates directly with YouTube; the app uses `youtube-nocookie.com` and disables autoplay to minimise that third-party data flow.
+
+The accepted production direction is a static web app with no YouTube Data API integration or runtime application backend. The current Hono health/static server and shared eligibility contracts are walking-skeleton scaffolding and are not required product architecture. See [ADR 0004](docs/maintainers/decisions/0004-static-web-deployment.md).
+
 ## Runtime requirements
 
 - Node.js 24.18.0, pinned in `.node-version` and `.nvmrc`
@@ -81,11 +89,11 @@ At minimum, each real-browser run must cover permission grant and denial, simult
 
 ```text
 apps/web/            React, Vite, browser-only code, and component tests
-apps/api/            Hono routes, validated server environment, and static serving
-packages/contracts/  Runtime-validated request and response schemas
+apps/api/            Temporary Hono health/static-preview scaffold
+packages/contracts/  Temporary shared eligibility-contract scaffold
 tests/e2e/            Built-application browser smoke tests
 ```
 
-Browser code may import shared contracts but cannot import the API workspace. Vite exposes only explicitly public `VITE_*` values; server configuration remains in `apps/api`. Learner audio exists only as browser-owned Blob data and object URLs. The API and shared contracts contain no learner-audio type or route.
+Browser code may import shared contracts but cannot import the API workspace. Vite exposes only explicitly public `VITE_*` values. Learner audio exists only as browser-owned Blob data and object URLs. No learner audio, selected URL, player activity, diagnostic, or consent state is sent to the scaffold server.
 
 Architecture and implementation notes live under [`docs/maintainers`](docs/maintainers).

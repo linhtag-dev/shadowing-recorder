@@ -1,7 +1,11 @@
 # ADR 0001: Single-Service Deployment Topology
 
-Status: Accepted  
+Status: Superseded by [ADR 0004](0004-static-web-deployment.md)
 Date: 2026-07-11
+
+This record preserves the original server-backed topology decision. The product
+owner subsequently chose a static web deployment with no YouTube Data API or
+runtime application backend.
 
 ## Context
 

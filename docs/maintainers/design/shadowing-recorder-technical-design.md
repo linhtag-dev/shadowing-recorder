@@ -6,13 +6,14 @@ Last updated: 2026-07-12
 ## Related documents
 
 - [MVP requirements](../requirements/shadowing-recorder-mvp.md)
-- [YouTube compliance and privacy rules](../rules/youtube-compliance-and-privacy.md)
+- [YouTube embed and privacy rules](../rules/youtube-compliance-and-privacy.md)
 - [MVP implementation plan](../plans/shadowing-recorder-mvp-implementation.md)
 
-This document defines the browser and server runtime design for the MVP: controller ownership, recording behavior, lifecycle safety, eligibility-load transactions, playback interlocks, and error recovery. Product scope and acceptance remain in the MVP requirements.
+This document defines the browser runtime design for the MVP: controller ownership, recording behavior, lifecycle safety, local video-load transactions, playback interlocks, and error recovery. Product scope and acceptance remain in the MVP requirements.
+
 ## Practice Mode
 
-The application must not record every time any YouTube video is played. Recording is allowed only while Practice Mode is explicitly armed for the currently checked `expectedVideoId`.
+The application must not record every time any YouTube video is played. Recording is allowed only while Practice Mode is explicitly armed for the currently selected and locally validated `expectedVideoId`.
 
 ### Controller states
 
@@ -39,19 +40,19 @@ Every timer or polling loop must be owned by the operation that created it:
 
 - An attempt draft owns its buffering timeout, heartbeat, timing sampler, duration-limit timer, and finalisation watchdog.
 - An attempt-playback request owns its pause-confirmation polling interval and two-second timeout under a `playbackRequestToken`.
-- A video-load transaction owns its eligibility-request timeout and abort controller under a `loadGeneration`.
+- A video-load transaction owns player construction and readiness callbacks under a `loadGeneration`.
 
 Every callback captures its owner ID, relevant generation, expected video ID, and expected controller/player state. Before acting, it must verify all of those values still match the current owner and state and, when the callback will control the player, freshly confirm that `player.getVideoUrl()` still resolves to the captured ID. A failed guard is a no-op even if `clearTimeout()` or `clearInterval()` previously raced with an already-queued callback.
 
 On `PAUSED`, `ENDED`, finalisation, identity change, disable, player error, recorder error, resource-limit shutdown, page hiding, or page exit, call one idempotent draft-cleanup function that clears the buffering, heartbeat, timing-sampling, and duration timers. Clear the buffering timer on every transition out of `buffering`, not only on `PLAYING`. Finalisation then creates only its own scoped watchdog, which is cleared by successful `stop` handling or by the fail-safe. Page-exit teardown is the exception: it clears an existing watchdog as well as every other timer because no callback may survive into a restored page.
 
-Similarly, clear pause-confirmation timers when playback starts, fails, is superseded, Practice Mode is disabled, the player is replaced, or the page exits. Clear load-request timers when the request resolves, aborts, or is superseded. Timer cleanup and callback guards are both required.
+Similarly, clear pause-confirmation timers when playback starts, fails, is superseded, Practice Mode is disabled, the player is replaced, or the page exits. Ignore or destroy player callbacks whose load generation has been superseded. Timer cleanup and callback guards are both required.
 
 ### Enabling
 
 Enabling Practice Mode must:
 
-1. Verify that consent is current, the player is eligible, and its checked video ID equals `expectedVideoId`.
+1. Verify that consent is current, the player is ready, and its current video ID equals the locally validated `expectedVideoId`.
 2. Require headphone confirmation.
 3. Enter `requestingMic` and request microphone access.
 4. If the request is cancelled, Practice Mode is disabled, or the video identity changes before permission resolves, immediately stop every track in the returned stream and remain disabled.
@@ -95,7 +96,7 @@ After fail-safe track shutdown completes, the controller remains `disabled` rath
 
 The normal-case rule is:
 
-> One continuous, prerecorded YouTube `PLAYING` to `PAUSED` or `ENDED` interval, excluding buffering time, equals one learner attempt.
+> One continuous, playable prerecorded YouTube `PLAYING` to `PAUSED` or `ENDED` interval, excluding buffering time, equals one learner attempt.
 
 | YouTube state | Application behaviour when Practice Mode is enabled |
 | --- | --- |
@@ -135,7 +136,7 @@ At recording start, store `player.getCurrentTime()` as the video start time. At 
 
 These values are approximate labels, not synchronisation guarantees. YouTube buffering, keyframe-based seeking, ads, and event-delivery latency can make the labels differ slightly from what the learner heard.
 
-The supported timing case is a prerecorded eligible video played without an advertisement, seek, video change, page suspension, or player error. Even in that case the UI labels the range `Approx. mm:ss–mm:ss`.
+The supported timing case is a playable prerecorded video played without an advertisement, seek, video change, page suspension, or player error. Even in that case the UI labels the range `Approx. mm:ss–mm:ss`.
 
 Each attempt has a `timingStatus`:
 
@@ -156,12 +157,12 @@ The native player must remain usable. Sample player time against monotonic wall 
 
 A later version may split the attempt automatically.
 
-## Browser and eligibility architecture
+## Static browser architecture
 
 ```mermaid
 flowchart LR
     subgraph Browser
-        URL["URL and load-transaction controller"]
+        URL["Local URL parser and load controller"]
         IFRAME["YouTube IFrame Player API"]
         PRACTICE["Practice controller"]
         MIC["getUserMedia"]
@@ -169,43 +170,49 @@ flowchart LR
         ATTEMPT["Attempt audio player"]
     end
 
-    subgraph AppServer["Application server"]
-        ELIGIBILITY["Eligibility endpoint"]
-    end
+    YOUTUBE["YouTube embed service"]
 
-    DATAAPI["YouTube Data API"]
-
-    URL -->|"candidate video ID"| ELIGIBILITY
-    ELIGIBILITY -->|"videos.list"| DATAAPI
-    DATAAPI -->|"status and exact video ID"| ELIGIBILITY
-    ELIGIBILITY -->|"eligibility and returned video ID"| URL
-    URL -->|"eligible ID and current loadGeneration only"| IFRAME
+    URL -->|"locally validated video ID"| IFRAME
+    IFRAME <-->|"player and media traffic"| YOUTUBE
     IFRAME -->|"state, time, and current URL"| PRACTICE
     MIC -->|"microphone stream"| PRACTICE
     PRACTICE -->|"start, pause, or stop"| RECORDER
     RECORDER -->|"browser-managed session Blob"| ATTEMPT
 ```
 
-There is no learner-audio path from `getUserMedia`, `MediaRecorder`, or attempt playback to the application server.
+There is no runtime application server and no YouTube Data API request. The
+browser sends player traffic directly to YouTube. No learner-selected URL,
+player event, microphone data, recording, diagnostic, or consent state is sent
+to the app operator.
 
-### Eligibility service contract
+### Uniform privacy behaviour
 
-The authoritative eligibility matrix, credential rules, and fail-closed public-launch requirements are defined in the [YouTube compliance and privacy rules](../rules/youtube-compliance-and-privacy.md). The browser sends only the locally extracted candidate video ID and creates no iframe until the current load transaction receives an exact eligible result for that ID.
+The app does not classify Made for Kids, live, embeddability, category,
+suitability, or audience metadata. It applies the same no-tracking and
+no-operator-collection behaviour to every selected video. The audience,
+third-party embed, and policy boundaries are defined in the
+[YouTube embed and privacy rules](../rules/youtube-compliance-and-privacy.md).
 
 ### Load transaction ownership
 
 Every `Load video` submission starts a new load transaction, even if the candidate URL is invalid or repeats the previous ID:
 
-1. Increment `loadGeneration`, record `latestCandidateId` as the parsed ID or `null` for an invalid submission, and create a new `AbortController` and request-timeout handle for that generation.
-2. Abort and clear the preceding load transaction when possible. Aborting is an optimisation only; correctness must not depend on the network request actually stopping.
-3. Carry the captured generation and candidate ID through teardown of any active Practice Mode, the eligibility fetch, response parsing, and player creation. Recheck ownership after every `await` and before every UI or player side effect.
-4. Require the eligibility response to include its exact `videoId`. Accept it only when the captured generation equals the current `loadGeneration`, its returned ID equals that transaction's candidate ID, and that ID still equals `latestCandidateId`.
-5. Ignore a stale, missing-ID, or mismatched-ID response completely: it must not change status text, `expectedVideoId`, Practice Mode, the existing player, or the current request's error state.
-6. Assign `expectedVideoId` and create the iframe only after the current transaction passes all checks. Bind player construction and `onReady` to the same load generation; destroy a player whose callback becomes stale before readiness.
+1. Increment `loadGeneration` and parse the submitted URL locally. Record
+   `latestCandidateId` as the validated ID or `null` for an invalid submission.
+2. Finalise any active attempt, disable Practice Mode, stop microphone tracks,
+   and destroy the preceding player before adopting a new candidate.
+3. If parsing fails, report the local validation error and create no iframe.
+4. Assign `expectedVideoId` only when the candidate ID is valid, then construct
+   the privacy-enhanced player while capturing that ID and `loadGeneration`.
+5. Every readiness, state, and error callback verifies that its captured
+   generation and video ID still match. A stale player is destroyed and its
+   callback performs no other side effect.
+6. On readiness, parse `player.getVideoUrl()` and require it to resolve to
+   `expectedVideoId` before exposing Practice Mode.
 
-For example, if URL A is submitted, URL B supersedes it, B's response arrives first, and A's response arrives last, only B may update the UI or create a player.
-
-Endpoint safeguards, quota handling, and the fail-closed response matrix are defined in the [YouTube compliance and privacy rules](../rules/youtube-compliance-and-privacy.md).
+For example, if URL A is submitted and URL B supersedes it before A's player
+becomes ready, A's late callback destroys A and only B may update the UI or
+become `expectedVideoId`.
 
 ### YouTube player
 
@@ -220,7 +227,7 @@ Recommended configuration:
 - `autoplay=0`; the learner initiates playback.
 - Optional `cc_load_policy=1` to prefer visible captions when the video provides them.
 
-Create the player only from a just-eligible ID and bind that ID as the player instance's immutable `expectedVideoId`. Register documented callbacks such as `onReady`, `onStateChange`, and `onError`; do not assume a video-change callback exists.
+Create the player only from a locally validated candidate ID and bind that ID as the player instance's immutable `expectedVideoId`. Register documented callbacks such as `onReady`, `onStateChange`, and `onError`; do not assume a video-change callback exists.
 
 The deployed page must send an HTTP `Referer` header or equivalent API Client identity to YouTube. Do not use `Referrer-Policy: no-referrer` or an iframe `referrerpolicy` that suppresses identity; `strict-origin-when-cross-origin` is an acceptable deployment default. In production, keep `origin` exactly aligned with the canonical `https://htag.uk` origin. Treat IFrame error `153` as a deployment/configuration failure and explain that the player request lacked required client identification.
 
@@ -267,7 +274,7 @@ The IFrame Player API does not expose `onVideoChanged`. Detect identity drift by
 - immediately before a new attempt starts or a buffered attempt resumes; and
 - before acting on an attempt-playback request.
 
-If the current ID is missing or differs, immediately stop learner-attempt playback, ask the player to stop, mark the active attempt `uncertain` with `identityChanged`, and finalise it. Disable Practice Mode, stop microphone tracks after finalisation, and remove or destroy the mismatched iframe. Existing attempts remain in the list under their original video IDs. Never silently adopt the new ID: it must pass the pre-embed eligibility lookup before a replacement iframe is created.
+If the current ID is missing or differs, immediately stop learner-attempt playback, ask the player to stop, mark the active attempt `uncertain` with `identityChanged`, and finalise it. Disable Practice Mode, stop microphone tracks after finalisation, and remove or destroy the mismatched iframe. Existing attempts remain in the list under their original video IDs. Never silently adopt the new ID: the learner must submit it through the local URL-validation and player-replacement flow.
 
 Illustrative serialized controller logic:
 
@@ -383,14 +390,20 @@ Calling `MediaRecorder.stop()` is only the request boundary. The final `dataavai
 
 Never place unvalidated user input directly into iframe HTML.
 
-URL processing has two separate stages. First, use the platform URL parser and accept only recognised YouTube hosts and path shapes. Initial syntax support can cover:
+Use the platform URL parser and accept only recognised YouTube hosts and path shapes. Initial syntax support can cover:
 
 - `https://www.youtube.com/watch?v=<video-id>`
 - `https://youtu.be/<video-id>`
 - `https://www.youtube.com/shorts/<video-id>`
 - `https://www.youtube.com/embed/<video-id>`
 
-Extract and validate only the candidate video ID. A URL parser cannot determine whether an ordinary `/watch?v=` URL points to a live broadcast, a Made for Kids video, or an embeddable video. Do not pass the candidate ID to the IFrame Player API until the eligibility service has returned `eligible` for that exact ID.
+Extract and validate only the candidate video ID. Never interpolate the original user input into iframe HTML. A URL parser cannot determine whether an ordinary `/watch?v=` URL points to a live broadcast, a Made for Kids video, or an embeddable video, and this application deliberately does not query that metadata.
+
+Accept the source URL only through the page's input and start parsing when the
+learner explicitly selects `Load video`. Hold the validated candidate ID in
+session-local controller state. Do not copy the source URL or video ID into the
+application URL path, query, or fragment, and do not mutate browser history when
+loading or replacing a video.
 
 Reject during local parsing:
 
@@ -399,11 +412,11 @@ Reject during local parsing:
 - Playlist-only URLs.
 - Channel and search-result URLs.
 
-After parsing, enter `Checking video` and run the server-side metadata lookup. Reject `live` and `upcoming` broadcasts, Made for Kids videos, unavailable videos, and non-embeddable videos based on that result. Treat a missing status or failed check as `unknown`, not as eligible.
+After parsing, enter `Loading video` and create the `youtube-nocookie.com` player from the validated candidate ID. Apply the same no-tracking and no-operator-collection behaviour to all candidates. YouTube remains authoritative for playability and reports invalid, unavailable, private, restricted, or embedding-disabled content through the player.
 
-When the learner submits a different URL while Practice Mode is active, first finalise the active attempt and disable Practice Mode. Keep completed attempts labelled with their original video ID. Replace the old player only after the new candidate succeeds; a failed check must not load an unchecked fallback.
+When the learner submits a different URL while Practice Mode is active, first finalise the active attempt and disable Practice Mode. Keep completed attempts labelled with their original video ID. Destroy the old player before constructing the replacement. If local parsing fails or the new player reports an error, leave Practice Mode disabled and allow another URL submission.
 
-Player creation can still fail after a successful lookup because availability, region, age, or embedding conditions can change between the API response and player load. The UI should distinguish `invalid URL`, `unsupported video`, `video unavailable`, and `eligibility check unavailable` while failing closed in every case.
+Player creation can fail because of availability, privacy, region, age, embedding, or client-identification conditions. The UI should distinguish `invalid URL`, `unsupported URL`, `video unavailable`, and deployment error where the IFrame error code permits it. Errors must never leave Practice Mode or a microphone stream active.
 
 ## Attempt data
 
@@ -449,8 +462,7 @@ Handle at least:
 
 - Invalid URL.
 - Unsupported YouTube URL form.
-- Eligibility service timeout, rate limit, API error, or quota exhaustion (`unknown`; no iframe).
-- Made for Kids, live/upcoming, unavailable, or embedding-disabled video.
+- Unavailable, private, restricted, or embedding-disabled video as reported by the IFrame Player API.
 - YouTube player API failed to load.
 - IFrame API errors `2`, `5`, `100`, `101`, `150`, and `153`; explain `153` as missing Referer/equivalent client identity and treat it as a deployment defect.
 - Current player video ID missing or different from `expectedVideoId`.
@@ -466,14 +478,12 @@ Handle at least:
 - YouTube pause could not be confirmed before attempt playback.
 - Page hidden, suspended, or closed while recording.
 
-Errors should never leave the microphone running invisibly, create an unchecked iframe, mix attempt chunks, or play learner audio over active YouTube playback. Recovery should preserve already completed attempts whenever practical. Fatal player, identity, recorder, and page-lifecycle errors finalise when possible, stop all microphone tracks, and leave Practice Mode disabled.
+Errors should never leave the microphone running invisibly, create an iframe from unvalidated input, mix attempt chunks, or play learner audio over active YouTube playback. Recovery should preserve already completed attempts whenever practical. Fatal player, identity, recorder, and page-lifecycle errors finalise when possible, stop all microphone tracks, and leave Practice Mode disabled.
 
 ## Technical references
 
 - [YouTube IFrame Player API reference](https://developers.google.com/youtube/iframe_api_reference)
 - [YouTube embedded-player parameters](https://developers.google.com/youtube/player_parameters)
-- [YouTube Data API videos.list](https://developers.google.com/youtube/v3/docs/videos/list)
-- [YouTube Data API video resource](https://developers.google.com/youtube/v3/docs/videos)
 - [MediaDevices.getUserMedia on MDN](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
 - [MediaRecorder on MDN](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder)
 - [MediaStream Recording specification](https://www.w3.org/TR/mediastream-recording/)

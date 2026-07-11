@@ -17,7 +17,7 @@ The developer-prechecked video ID, its verification date, exact browser, operati
 | Playwright Firefox | `npm run test:e2e` | Pass on 2026-07-12 | Same synthetic scope as Chromium. No live media validation. |
 | Playwright WebKit | `npm run test:e2e` | Pass on 2026-07-12 | Same synthetic scope as Chromium. No live media validation. |
 | Production container plumbing | `VITE_SHADOWING_VIDEO_ID=stage1_test npm run container:build`, health curl, then `npx playwright test` against the running image | Pass on 2026-07-11 | The pinned Node 24 image received the named build argument, served health, and passed the synthetic flow in all three Playwright engines with the exact loopback iframe origin. |
-| Production container real media | See container procedure below | Pass, operator-confirmed on 2026-07-11 | Built with the externally recorded, currently eligible prechecked ID and exercised with a real microphone. The required recording, playback, lifecycle, and microphone-shutdown checks passed. |
+| Production container real media | See container procedure below | Pass, operator-confirmed on 2026-07-11 | Built with the externally recorded, manually confirmed playable test ID and exercised with a real microphone. The required recording, playback, lifecycle, and microphone-shutdown checks passed. |
 
 ## Required real-browser matrix
 
@@ -37,7 +37,7 @@ If one physical Apple device cannot cover both the required iOS and iPadOS rows,
 
 ## Local and container procedure
 
-1. Confirm the prechecked video's current eligibility manually and record its ID and verification date outside the repository.
+1. Confirm that the selected test video is currently playable through the privacy-enhanced embed and record its ID and verification date outside the repository.
 2. Export that ID only in the current shell:
 
    ```sh
