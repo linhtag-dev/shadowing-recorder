@@ -44,6 +44,19 @@ interface PlaybackProgress {
   duration: number
 }
 
+interface ComparisonControlsProps {
+  activePlayback: PlaybackSource
+  audioIsPlaying: boolean
+  audioProgress: PlaybackProgress
+  onRestart: () => void
+  onToggleRecording: () => void
+  onToggleReference: () => void
+  playerIsReady: boolean
+  recordingIsAvailable: boolean
+  referenceIsPlaying: boolean
+  referenceProgress: PlaybackProgress
+}
+
 const emptyPlaybackProgress: PlaybackProgress = {
   currentTime: 0,
   duration: 0,
@@ -87,6 +100,85 @@ function formatPlaybackProgress(progress: PlaybackProgress) {
   return `${formatMediaTime(progress.currentTime)} / ${formatMediaTime(
     progress.duration,
   )}`
+}
+
+function ComparisonControls({
+  activePlayback,
+  audioIsPlaying,
+  audioProgress,
+  onRestart,
+  onToggleRecording,
+  onToggleReference,
+  playerIsReady,
+  recordingIsAvailable,
+  referenceIsPlaying,
+  referenceProgress,
+}: ComparisonControlsProps) {
+  const restartLabel = `Restart ${
+    activePlayback === 'reference' ? 'reference video' : 'my recording'
+  }`
+
+  return (
+    <div
+      className={styles.playbackControls}
+      aria-label="Quick playback controls"
+    >
+      <button
+        aria-label={
+          referenceIsPlaying ? 'Pause reference video' : 'Play reference video'
+        }
+        aria-pressed={referenceIsPlaying}
+        className={styles.sourceButton}
+        data-active={referenceIsPlaying ? 'true' : 'false'}
+        disabled={!playerIsReady}
+        onClick={onToggleReference}
+        type="button"
+      >
+        <span className={styles.playbackIcon} aria-hidden="true">
+          {referenceIsPlaying ? 'Ⅱ' : '▶'}
+        </span>
+        <span className={styles.sourceButtonCopy}>
+          <strong>Reference</strong>
+          <small>{formatPlaybackProgress(referenceProgress)}</small>
+        </span>
+      </button>
+      <button
+        aria-label={audioIsPlaying ? 'Pause my recording' : 'Play my recording'}
+        aria-pressed={audioIsPlaying}
+        className={styles.sourceButton}
+        data-active={audioIsPlaying ? 'true' : 'false'}
+        disabled={!recordingIsAvailable}
+        onClick={onToggleRecording}
+        type="button"
+      >
+        <span className={styles.playbackIcon} aria-hidden="true">
+          {audioIsPlaying ? 'Ⅱ' : '▶'}
+        </span>
+        <span className={styles.sourceButtonCopy}>
+          <strong>My recording</strong>
+          <small>
+            {recordingIsAvailable
+              ? formatPlaybackProgress(audioProgress)
+              : 'Record an attempt first'}
+          </small>
+        </span>
+      </button>
+      <button
+        aria-label={restartLabel}
+        className={styles.restartButton}
+        disabled={
+          activePlayback === 'reference'
+            ? !playerIsReady
+            : !recordingIsAvailable
+        }
+        onClick={onRestart}
+        title={restartLabel}
+        type="button"
+      >
+        <span aria-hidden="true">↺</span>
+      </button>
+    </div>
+  )
 }
 
 function isEditableShortcutTarget(target: EventTarget | null) {
@@ -161,6 +253,8 @@ function ConfiguredRecorderSpike({
   videoId,
 }: ConfiguredRecorderSpikeProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const comparisonTrayRef = useRef<HTMLElement>(null)
+  const dockBoundaryRef = useRef<HTMLDivElement>(null)
   const lifecycle = useRef({ generation: 0 })
   const pendingComparisonPlayback = useRef(false)
   const playerRef = useRef<YouTubePlayerInstance | null>(null)
@@ -168,6 +262,9 @@ function ConfiguredRecorderSpike({
     useState<PlaybackSource>('reference')
   const [audioIsPlaying, setAudioIsPlaying] = useState(false)
   const [audioProgress, setAudioProgress] = useState(emptyPlaybackProgress)
+  const [comparisonTrayHasFocus, setComparisonTrayHasFocus] = useState(false)
+  const [comparisonTrayHasPassed, setComparisonTrayHasPassed] = useState(false)
+  const [dockBoundaryIsVisible, setDockBoundaryIsVisible] = useState(false)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [playerIsReady, setPlayerIsReady] = useState(false)
   const [playerPlaybackState, setPlayerPlaybackState] =
@@ -185,6 +282,36 @@ function ConfiguredRecorderSpike({
     controller.subscribe,
     controller.getSnapshot,
   )
+
+  useEffect(() => {
+    const comparisonTray = comparisonTrayRef.current
+    const dockBoundary = dockBoundaryRef.current
+    if (
+      comparisonTray === null ||
+      dockBoundary === null ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
+      return
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === comparisonTray) {
+          setComparisonTrayHasPassed(
+            !entry.isIntersecting && entry.boundingClientRect.bottom <= 0,
+          )
+        }
+
+        if (entry.target === dockBoundary) {
+          setDockBoundaryIsVisible(entry.isIntersecting)
+        }
+      }
+    })
+
+    observer.observe(comparisonTray)
+    observer.observe(dockBoundary)
+    return () => observer.disconnect()
+  }, [])
 
   const updateReferenceProgress = useCallback(() => {
     const player = playerRef.current
@@ -344,6 +471,23 @@ function ConfiguredRecorderSpike({
       : microphoneIsActive
         ? 'Microphone active'
         : 'Microphone off'
+  const practiceControlLabel =
+    snapshot.state === 'requestingMic'
+      ? 'Connecting microphone…'
+      : practiceModeIsEnabled
+        ? 'Practice Mode on'
+        : snapshot.state === 'error'
+          ? 'Try Practice Mode again'
+          : 'Enable Practice Mode'
+  const practiceGateTitle =
+    snapshot.state === 'requestingMic'
+      ? 'Allow microphone access to continue'
+      : practiceModeIsEnabled
+        ? 'Practice Mode is ready'
+        : 'Turn on Practice Mode to record and compare'
+  const practiceGateDescription = practiceModeIsEnabled
+    ? 'Play the video to start recording. Wear headphones to keep the reference audio out of your microphone recording.'
+    : 'Your microphone records only while the reference plays. Wear headphones to keep the reference audio out of your recording.'
   const errorMessage = snapshot.errorMessage ?? playerError
   const visibleStatus = errorMessage ?? statusMessages[snapshot.state]
   const referenceIsPlaying = ['buffering', 'playing'].includes(
@@ -358,7 +502,20 @@ function ConfiguredRecorderSpike({
         ? 'Finishing your recording…'
         : recordingIsAvailable
           ? 'Ready to compare'
-          : 'Record an attempt to compare'
+          : practiceModeIsEnabled
+            ? 'Record an attempt to compare'
+            : 'Enable Practice Mode to record and compare'
+  const comparisonSessionIsUseful =
+    practiceModeIsEnabled ||
+    referenceIsPlaying ||
+    audioIsPlaying ||
+    recordingIsAvailable ||
+    captureIsBusy
+  const showCompactDock =
+    comparisonTrayHasPassed &&
+    !dockBoundaryIsVisible &&
+    !comparisonTrayHasFocus &&
+    comparisonSessionIsUseful
 
   const enablePracticeMode = () => {
     stopAudio(audioRef.current)
@@ -542,45 +699,27 @@ function ConfiguredRecorderSpike({
           </div>
           <span className={styles.fixedBadge}>Fixed test video</span>
         </div>
-        <p className={styles.headphones}>
-          <span aria-hidden="true">🎧</span>
-          <span>
-            <strong>Wear headphones while recording.</strong> This keeps the
-            reference audio out of your microphone recording.
-          </span>
-        </p>
-        <FixedVideoPlayer
-          onError={handlePlayerError}
-          onPlaybackStateChange={handlePlaybackStateChange}
-          onPlayerReady={handlePlayerReady}
-          origin={origin}
-          playerApi={playerApi}
-          videoId={videoId}
-        />
-      </section>
-
-      <section
-        aria-keyshortcuts="Alt+C"
-        className={styles.comparisonDock}
-        aria-label="Playback comparison"
-      >
-        <div className={styles.comparisonSummary}>
-          <p>
-            Compare playback
-            <kbd className={styles.shortcutHint}>Alt/⌥ C</kbd>
-          </p>
-          <span aria-live="polite">{comparisonStatus}</span>
-        </div>
         <div
-          className={styles.playbackControls}
-          aria-label="Quick playback controls"
+          className={styles.practiceGate}
+          data-active={practiceModeIsEnabled ? 'true' : 'false'}
         >
+          <span className={styles.practiceGateStep} aria-hidden="true">
+            01
+          </span>
+          <div className={styles.practiceGateCopy}>
+            <p>Before you play</p>
+            <strong>{practiceGateTitle}</strong>
+            <span id="practice-gate-description">
+              {practiceGateDescription}
+            </span>
+          </div>
           <button
+            aria-describedby="practice-gate-description"
             aria-label={`Turn Practice Mode ${
               practiceModeIsEnabled ? 'off' : 'on'
             }`}
             aria-pressed={practiceModeIsEnabled}
-            className={styles.practiceToggle}
+            className={styles.practiceControl}
             data-active={practiceModeIsEnabled ? 'true' : 'false'}
             onClick={togglePracticeMode}
             type="button"
@@ -589,74 +728,77 @@ function ConfiguredRecorderSpike({
               <span />
             </span>
             <span className={styles.practiceToggleCopy}>
-              <strong>Practice Mode</strong>
+              <strong>{practiceControlLabel}</strong>
               <small>{microphoneStatus}</small>
             </span>
           </button>
-          <button
-            aria-label={
-              referenceIsPlaying
-                ? 'Pause reference video'
-                : 'Play reference video'
-            }
-            aria-pressed={referenceIsPlaying}
-            className={styles.sourceButton}
-            data-active={referenceIsPlaying ? 'true' : 'false'}
-            disabled={!playerIsReady}
-            onClick={toggleReferencePlayback}
-            type="button"
-          >
-            <span className={styles.playbackIcon} aria-hidden="true">
-              {referenceIsPlaying ? 'Ⅱ' : '▶'}
-            </span>
-            <span className={styles.sourceButtonCopy}>
-              <strong>Reference</strong>
-              <small>{formatPlaybackProgress(referenceProgress)}</small>
-            </span>
-          </button>
-          <button
-            aria-label={
-              audioIsPlaying ? 'Pause my recording' : 'Play my recording'
-            }
-            aria-pressed={audioIsPlaying}
-            className={styles.sourceButton}
-            data-active={audioIsPlaying ? 'true' : 'false'}
-            disabled={!recordingIsAvailable}
-            onClick={toggleRecordingPlayback}
-            type="button"
-          >
-            <span className={styles.playbackIcon} aria-hidden="true">
-              {audioIsPlaying ? 'Ⅱ' : '▶'}
-            </span>
-            <span className={styles.sourceButtonCopy}>
-              <strong>My recording</strong>
-              <small>
-                {recordingIsAvailable
-                  ? formatPlaybackProgress(audioProgress)
-                  : 'Record an attempt first'}
-              </small>
-            </span>
-          </button>
-          <button
-            aria-label={`Restart ${
-              activePlayback === 'reference'
-                ? 'reference video'
-                : 'my recording'
-            }`}
-            className={styles.restartButton}
-            disabled={
-              activePlayback === 'reference'
-                ? !playerIsReady
-                : !recordingIsAvailable
-            }
-            onClick={restartActivePlayback}
-            type="button"
-          >
-            <span aria-hidden="true">↺</span>
-            <span className={styles.restartLabel}>Restart</span>
-          </button>
         </div>
+        <FixedVideoPlayer
+          onError={handlePlayerError}
+          onPlaybackStateChange={handlePlaybackStateChange}
+          onPlayerReady={handlePlayerReady}
+          origin={origin}
+          playerApi={playerApi}
+          videoId={videoId}
+        />
+        <section
+          aria-hidden={showCompactDock ? true : undefined}
+          aria-keyshortcuts="Alt+C"
+          aria-label="Playback comparison"
+          className={styles.comparisonTray}
+          data-comparison-tray="inline"
+          inert={showCompactDock}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setComparisonTrayHasFocus(false)
+            }
+          }}
+          onFocusCapture={() => setComparisonTrayHasFocus(true)}
+          ref={comparisonTrayRef}
+        >
+          <div className={styles.comparisonTrayHeading}>
+            <p>Compare playback</p>
+            <span aria-live="polite">{comparisonStatus}</span>
+          </div>
+          <ComparisonControls
+            activePlayback={activePlayback}
+            audioIsPlaying={audioIsPlaying}
+            audioProgress={audioProgress}
+            onRestart={restartActivePlayback}
+            onToggleRecording={toggleRecordingPlayback}
+            onToggleReference={toggleReferencePlayback}
+            playerIsReady={playerIsReady}
+            recordingIsAvailable={recordingIsAvailable}
+            referenceIsPlaying={referenceIsPlaying}
+            referenceProgress={referenceProgress}
+          />
+        </section>
       </section>
+
+      {showCompactDock ? (
+        <section
+          aria-keyshortcuts="Alt+C"
+          aria-label="Playback comparison"
+          className={styles.comparisonDock}
+          data-comparison-tray="floating"
+        >
+          <span className={styles.visuallyHidden} aria-live="polite">
+            {comparisonStatus}
+          </span>
+          <ComparisonControls
+            activePlayback={activePlayback}
+            audioIsPlaying={audioIsPlaying}
+            audioProgress={audioProgress}
+            onRestart={restartActivePlayback}
+            onToggleRecording={toggleRecordingPlayback}
+            onToggleReference={toggleReferencePlayback}
+            playerIsReady={playerIsReady}
+            recordingIsAvailable={recordingIsAvailable}
+            referenceIsPlaying={referenceIsPlaying}
+            referenceProgress={referenceProgress}
+          />
+        </section>
+      ) : null}
 
       <div className={styles.workspace}>
         <section
@@ -800,6 +942,12 @@ function ConfiguredRecorderSpike({
           )}
         </aside>
       </div>
+      <div
+        aria-hidden="true"
+        className={styles.dockBoundary}
+        data-comparison-dock-boundary
+        ref={dockBoundaryRef}
+      />
     </main>
   )
 }

@@ -11,6 +11,7 @@ const configuredVideo = parseVideoConfiguration('stage1_test')
 describe('RecorderSpike', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('renders a clear disabled state without an iframe or practice controls', () => {
@@ -221,7 +222,7 @@ describe('RecorderSpike', () => {
     ).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('toggles Practice Mode from the comparison dock', async () => {
+  it('toggles Practice Mode from the setup gate', async () => {
     const environment = createFakeRecorderEnvironment()
 
     render(
@@ -236,22 +237,109 @@ describe('RecorderSpike', () => {
       name: 'Turn Practice Mode on',
     })
     expect(enableToggle).toHaveAttribute('aria-pressed', 'false')
+    expect(enableToggle).toHaveTextContent('Enable Practice Mode')
+    expect(
+      screen.getByText('Turn on Practice Mode to record and compare'),
+    ).toBeInTheDocument()
 
     fireEvent.click(enableToggle)
     await screen.findByText('Ready. Play the video to start recording.')
     expect(environment.microphone.requestCalls).toBe(1)
-    expect(
-      screen.getByRole('button', { name: 'Turn Practice Mode off' }),
-    ).toHaveAttribute('aria-pressed', 'true')
+    const disableToggle = screen.getByRole('button', {
+      name: 'Turn Practice Mode off',
+    })
+    expect(disableToggle).toHaveAttribute('aria-pressed', 'true')
+    expect(disableToggle).toHaveTextContent('Practice Mode on')
+    expect(screen.getByText('Practice Mode is ready')).toBeInTheDocument()
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Turn Practice Mode off' }),
-    )
+    fireEvent.click(disableToggle)
     expect(screen.getByRole('status')).toHaveTextContent('Practice Mode is off')
     expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
     expect(
       screen.getByRole('button', { name: 'Turn Practice Mode on' }),
     ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('floats comparison controls only after their inline tray has passed', async () => {
+    let intersectionCallback: IntersectionObserverCallback | undefined
+    const observe = vi.fn()
+    class FakeIntersectionObserver implements IntersectionObserver {
+      readonly root = null
+      readonly rootMargin = '0px'
+      readonly thresholds = [0]
+      disconnect = vi.fn()
+      observe = observe
+      takeRecords = vi.fn(() => [])
+      unobserve = vi.fn()
+
+      constructor(callback: IntersectionObserverCallback) {
+        intersectionCallback = callback
+      }
+    }
+
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver)
+
+    const environment = createFakeRecorderEnvironment()
+    render(
+      <RecorderSpike
+        dependencies={environment.dependencies}
+        playerApi={new FakeYouTubePlayerApi()}
+        videoConfiguration={configuredVideo}
+      />,
+    )
+
+    const inlineTray = screen.getByRole('region', {
+      name: 'Playback comparison',
+    })
+    const boundary = document.querySelector('[data-comparison-dock-boundary]')
+    expect(boundary).not.toBeNull()
+    expect(observe).toHaveBeenCalledWith(inlineTray)
+    expect(observe).toHaveBeenCalledWith(boundary)
+
+    const emitIntersection = (
+      target: Element,
+      isIntersecting: boolean,
+      bottom: number,
+    ) => {
+      act(() => {
+        intersectionCallback?.(
+          [
+            {
+              boundingClientRect: { bottom },
+              isIntersecting,
+              target,
+            } as IntersectionObserverEntry,
+          ],
+          {} as IntersectionObserver,
+        )
+      })
+    }
+
+    emitIntersection(inlineTray, false, 500)
+    expect(
+      document.querySelector('[data-comparison-tray="floating"]'),
+    ).not.toBeInTheDocument()
+
+    emitIntersection(inlineTray, false, -1)
+    expect(
+      document.querySelector('[data-comparison-tray="floating"]'),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Turn Practice Mode on' }),
+    )
+    await screen.findByText('Ready. Play the video to start recording.')
+
+    expect(
+      screen.getByRole('region', { name: 'Playback comparison' }),
+    ).toHaveAttribute('data-comparison-tray', 'floating')
+    expect(inlineTray).toHaveAttribute('aria-hidden', 'true')
+
+    emitIntersection(boundary as Element, true, 600)
+    expect(
+      document.querySelector('[data-comparison-tray="floating"]'),
+    ).not.toBeInTheDocument()
+    expect(inlineTray).not.toHaveAttribute('aria-hidden')
   })
 
   it('cycles from reference capture to recording playback with Alt+C', async () => {

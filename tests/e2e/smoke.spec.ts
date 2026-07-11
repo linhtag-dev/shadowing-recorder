@@ -210,19 +210,20 @@ test('serves the fixed-video recorder and API from one origin', async ({
   expect(new URL(iframeSource ?? '').searchParams.get('enablejsapi')).toBe('1')
   await expect.poll(() => iframeRequestUrl).toContain('/embed/stage1_test')
 
-  const comparisonDock = page.getByRole('region', {
-    name: 'Playback comparison',
-  })
-  const practiceToggle = comparisonDock.getByRole('button', {
+  const inlineComparison = page.locator('[data-comparison-tray="inline"]')
+  const floatingComparison = page.locator('[data-comparison-tray="floating"]')
+  const practiceToggle = page.getByRole('button', {
     name: 'Turn Practice Mode on',
   })
+  await expect(inlineComparison).toBeAttached()
+  await expect(floatingComparison).toHaveCount(0)
   await expect(practiceToggle).toHaveAttribute('aria-pressed', 'false')
   await practiceToggle.click()
   await expect(page.getByRole('status')).toContainText(
     'Play the video to start recording',
   )
   await expect(
-    comparisonDock.getByRole('button', { name: 'Turn Practice Mode off' }),
+    page.getByRole('button', { name: 'Turn Practice Mode off' }),
   ).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByText('Echo cancellation').locator('..')).toContainText(
     'Off',
@@ -269,10 +270,14 @@ test('serves the fixed-video recorder and API from one origin', async ({
   await expect(playback).toHaveAttribute('src', /^blob:/)
   await playback.scrollIntoViewIfNeeded()
 
+  await inlineComparison.scrollIntoViewIfNeeded()
+  await expect(floatingComparison).toHaveCount(0)
+  await expect(inlineComparison).not.toHaveAttribute('aria-hidden')
+  await expect(inlineComparison).toHaveCSS('position', 'static')
   await expect(
-    comparisonDock.getByRole('button', { name: 'Play my recording' }),
+    inlineComparison.getByRole('button', { name: 'Play my recording' }),
   ).toBeEnabled()
-  await expect(comparisonDock.getByText('0:23 / 32:38')).toBeVisible()
+  await expect(inlineComparison.getByText('0:23 / 32:38')).toBeVisible()
   await page.keyboard.press('Alt+C')
   await expect
     .poll(() =>
@@ -286,41 +291,23 @@ test('serves the fixed-video recorder and API from one origin', async ({
       ),
     )
     .toBe(1)
-  const dockBounds = await comparisonDock.boundingBox()
-  const viewportHeight = page.viewportSize()?.height
-  await expect(comparisonDock).toHaveCSS('position', 'fixed')
-  expect(dockBounds).not.toBeNull()
-  expect(viewportHeight).toBeDefined()
-  expect(dockBounds?.y ?? -1).toBeGreaterThanOrEqual(0)
-  expect((dockBounds?.y ?? 0) + (dockBounds?.height ?? 0)).toBeLessThanOrEqual(
-    viewportHeight ?? 0,
-  )
-
-  await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight)
-  })
-  const dockAtPageEnd = await comparisonDock.boundingBox()
-  const diagnosticsAtPageEnd = await page
-    .getByRole('complementary', { name: 'Latest attempt' })
-    .boundingBox()
-  const footerAtPageEnd = await page.getByRole('contentinfo').boundingBox()
-  expect(dockAtPageEnd).not.toBeNull()
-  expect(diagnosticsAtPageEnd).not.toBeNull()
-  expect(footerAtPageEnd).not.toBeNull()
-  expect(
-    (diagnosticsAtPageEnd?.y ?? 0) + (diagnosticsAtPageEnd?.height ?? 0),
-  ).toBeLessThanOrEqual(dockAtPageEnd?.y ?? 0)
-  const footerToDockGap =
-    (dockAtPageEnd?.y ?? 0) -
-    ((footerAtPageEnd?.y ?? 0) + (footerAtPageEnd?.height ?? 0))
-  expect(footerToDockGap).toBeGreaterThanOrEqual(-1)
-  expect(footerToDockGap).toBeLessThanOrEqual(32)
 
   await page.setViewportSize({ height: 667, width: 375 })
   await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight)
+    const tray = document.querySelector<HTMLElement>(
+      '[data-comparison-tray="inline"]',
+    )
+    if (tray !== null) {
+      window.scrollTo(
+        0,
+        window.scrollY + tray.getBoundingClientRect().bottom + 32,
+      )
+    }
   })
-  const mobileDockBounds = await comparisonDock.boundingBox()
+  await expect(floatingComparison).toBeVisible()
+  await expect(inlineComparison).toHaveAttribute('aria-hidden', 'true')
+  await expect(floatingComparison).toHaveCSS('position', 'fixed')
+  const mobileDockBounds = await floatingComparison.boundingBox()
   expect(mobileDockBounds).not.toBeNull()
   expect(mobileDockBounds?.x ?? -1).toBeGreaterThanOrEqual(0)
   expect(
@@ -331,9 +318,41 @@ test('serves the fixed-video recorder and API from one origin', async ({
     (mobileDockBounds?.y ?? 0) + (mobileDockBounds?.height ?? 0),
   ).toBeLessThanOrEqual(667)
 
-  await comparisonDock
+  await floatingComparison
     .getByRole('button', { name: 'Restart reference video' })
     .click()
+
+  await inlineComparison.scrollIntoViewIfNeeded()
+  await expect(floatingComparison).toHaveCount(0)
+  await expect(inlineComparison).not.toHaveAttribute('aria-hidden')
+
+  await page.evaluate(() => {
+    const tray = document.querySelector<HTMLElement>(
+      '[data-comparison-tray="inline"]',
+    )
+    if (tray !== null) {
+      window.scrollTo(
+        0,
+        window.scrollY + tray.getBoundingClientRect().bottom + 32,
+      )
+    }
+  })
+  await expect(floatingComparison).toBeVisible()
+
+  await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight)
+  })
+  await expect(floatingComparison).toHaveCount(0)
+  const diagnosticsAtPageEnd = await page
+    .getByRole('complementary', { name: 'Latest attempt' })
+    .boundingBox()
+  const footerAtPageEnd = await page.getByRole('contentinfo').boundingBox()
+  expect(diagnosticsAtPageEnd).not.toBeNull()
+  expect(footerAtPageEnd).not.toBeNull()
+  expect(
+    (diagnosticsAtPageEnd?.y ?? 0) + (diagnosticsAtPageEnd?.height ?? 0),
+  ).toBeLessThanOrEqual(footerAtPageEnd?.y ?? 0)
+
   await expect(page.getByText('audio/webm;codecs=opus')).toBeVisible()
   await expect(page.getByText('dataavailable (15 bytes)')).toBeVisible()
   await expect(page.getByText('stop', { exact: true })).toBeVisible()

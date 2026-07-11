@@ -1,7 +1,4 @@
 .main {
-  --comparison-dock-height: 5.25rem;
-  --comparison-dock-gap: 0.75rem;
-
   width: min(100% - 2rem, 72rem);
   margin-inline: auto;
   flex: 1;
@@ -98,102 +95,191 @@
   box-shadow: 0 0 0 0.24rem rgb(180 60 44 / 15%);
 }
 
-.headphones {
-  display: flex;
-  margin: 0 0 1rem;
-  align-items: flex-start;
-  gap: 0.8rem;
-  padding: 1rem;
-  border-radius: 0.8rem;
-  background: var(--sage);
-  color: var(--muted-ink);
-  line-height: 1.5;
-}
-
-.headphones > span:first-child {
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
-.headphones strong {
-  color: var(--ink);
-}
-
-.comparisonDock {
-  position: fixed;
-  bottom: max(var(--comparison-dock-gap), env(safe-area-inset-bottom));
-  left: 50%;
-  z-index: 5;
+.practiceGate {
   display: grid;
-  width: min(100% - 2rem, 72rem);
-  min-height: var(--comparison-dock-height);
-  padding: 0.7rem;
-  border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 1rem;
-  background: rgb(24 34 29 / 96%);
-  box-shadow: 0 1rem 3rem rgb(24 34 29 / 24%);
-  color: #f7f2e8;
-  gap: 1rem;
-  grid-template-columns: minmax(9rem, 0.55fr) minmax(0, 3fr);
+  margin-bottom: 1rem;
   align-items: center;
-  backdrop-filter: blur(0.75rem);
-  transform: translateX(-50%);
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid rgb(189 75 49 / 32%);
+  border-radius: 0.9rem;
+  background: #fbf0ec;
+  box-shadow: inset 0.25rem 0 var(--accent);
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
-.comparisonSummary {
+.practiceGate[data-active='true'] {
+  border-color: #b7c8b9;
+  background: var(--sage);
+  box-shadow: inset 0.25rem 0 #637468;
+}
+
+.practiceGateStep {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(189 75 49 / 13%);
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.practiceGate[data-active='true'] .practiceGateStep {
+  background: #637468;
+  color: white;
+}
+
+.practiceGateCopy {
+  display: flex;
   min-width: 0;
-  padding-left: 0.45rem;
+  flex-direction: column;
+  gap: 0.18rem;
 }
 
-.comparisonSummary p,
-.comparisonSummary span {
+.practiceGateCopy p,
+.practiceGateCopy strong,
+.practiceGateCopy span {
   margin: 0;
 }
 
-.comparisonSummary p {
-  display: flex;
+.practiceGateCopy p {
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.practiceGate[data-active='true'] .practiceGateCopy p {
+  color: #4f6055;
+}
+
+.practiceGateCopy strong {
+  font-size: 1rem;
+}
+
+.practiceGateCopy span {
+  max-width: 58rem;
+  color: var(--muted-ink);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.practiceControl {
+  display: inline-flex;
+  min-width: 14rem;
+  min-height: 3.65rem;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.65rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.75rem;
+  background: var(--accent);
+  box-shadow: 0 0.35rem 0.8rem rgb(139 47 32 / 18%);
+  color: white;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.practiceControl:hover {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+}
+
+.practiceControl[data-active='true'] {
+  border-color: #8ea092;
+  background: #fffdf8;
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.practiceControl[data-active='true']:hover {
+  border-color: #6f8274;
+  background: white;
+}
+
+.comparisonTray {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.95rem;
+  background: var(--ink);
+  color: #f7f2e8;
+}
+
+.comparisonTrayHeading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.05rem 0.25rem 0.65rem;
+}
+
+.comparisonTrayHeading p,
+.comparisonTrayHeading span {
+  margin: 0;
+}
+
+.comparisonTrayHeading p {
+  flex: none;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
-.shortcutHint {
-  padding: 0.12rem 0.3rem;
-  border: 1px solid rgb(255 255 255 / 22%);
-  border-radius: 0.3rem;
-  background: rgb(255 255 255 / 8%);
-  color: #dfe8e0;
-  font-family: inherit;
-  font-size: 0.58rem;
-  font-weight: 750;
-  letter-spacing: 0.02em;
-  text-transform: none;
+.comparisonTrayHeading span {
+  overflow: hidden;
+  color: #b8c4bb;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.comparisonSummary span {
-  display: block;
-  margin-top: 0.25rem;
-  overflow: hidden;
-  color: #b8c4bb;
-  font-size: 0.78rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.comparisonDock {
+  position: fixed;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 5;
+  width: min(calc(100% - 2rem), 52rem);
+  padding: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 0.9rem;
+  background: rgb(24 34 29 / 96%);
+  box-shadow: 0 0.65rem 1.8rem rgb(24 34 29 / 20%);
+  color: #f7f2e8;
+  backdrop-filter: blur(0.65rem);
+  transform: translateX(-50%);
+  animation: comparison-dock-enter 180ms ease-out;
+}
+
+@keyframes comparison-dock-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0.4rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .playbackControls {
   display: grid;
   min-width: 0;
   gap: 0.55rem;
-  grid-template-columns:
-    minmax(8.5rem, 0.75fr) repeat(2, minmax(0, 1fr))
-    auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 3.75rem;
 }
 
-.practiceToggle,
 .sourceButton,
 .restartButton {
   min-height: 3.75rem;
@@ -204,7 +290,6 @@
   cursor: pointer;
 }
 
-.practiceToggle,
 .sourceButton {
   display: flex;
   min-width: 0;
@@ -215,7 +300,6 @@
 }
 
 .sourceButton:hover:not(:disabled),
-.practiceToggle:hover,
 .restartButton:hover:not(:disabled) {
   border-color: rgb(255 255 255 / 45%);
   background: rgb(255 255 255 / 13%);
@@ -227,18 +311,13 @@
   color: var(--ink);
 }
 
-.practiceToggle[data-active='true'] {
-  border-color: rgb(223 233 223 / 55%);
-  background: rgb(223 233 223 / 12%);
-}
-
 .practiceSwitch {
   position: relative;
   width: 2.25rem;
   height: 1.3rem;
   flex: none;
   border-radius: 999px;
-  background: #738078;
+  background: rgb(255 255 255 / 38%);
   transition: background 160ms ease;
 }
 
@@ -254,11 +333,11 @@
   transition: transform 160ms ease;
 }
 
-.practiceToggle[data-active='true'] .practiceSwitch {
+.practiceControl[data-active='true'] .practiceSwitch {
   background: var(--accent);
 }
 
-.practiceToggle[data-active='true'] .practiceSwitch > span {
+.practiceControl[data-active='true'] .practiceSwitch > span {
   transform: translateX(0.95rem);
 }
 
@@ -278,12 +357,16 @@
 }
 
 .practiceToggleCopy strong {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
 }
 
 .practiceToggleCopy small {
-  color: #b8c4bb;
+  color: rgb(255 255 255 / 78%);
   font-size: 0.68rem;
+}
+
+.practiceControl[data-active='true'] .practiceToggleCopy small {
+  color: var(--muted-ink);
 }
 
 .playbackIcon {
@@ -331,8 +414,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.55rem 0.8rem;
+  padding: 0.55rem;
   font-size: 0.8rem;
   font-weight: 750;
 }
@@ -341,18 +423,37 @@
   font-size: 1.15rem;
 }
 
-.restartLabel {
-  font-size: 0.8rem;
-}
-
 .sourceButton:disabled,
 .restartButton:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
+  border-color: rgb(255 255 255 / 10%);
+  background: transparent;
+  opacity: 0.46;
 }
 
 :global(body):has(.comparisonDock) {
-  padding-bottom: 6.75rem;
+  padding-bottom: 5.25rem;
+}
+
+.comparisonDock .sourceButton,
+.comparisonDock .restartButton {
+  min-height: 3.25rem;
+}
+
+.dockBoundary {
+  width: 100%;
+  height: 1px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .workspace {
@@ -501,30 +602,13 @@
 }
 
 @media (max-width: 48rem) {
-  .main {
-    --comparison-dock-height: 7.25rem;
-    --comparison-dock-gap: 0.65rem;
+  .practiceGate {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .comparisonDock {
-    gap: 0.55rem;
-    grid-template-columns: 1fr;
-  }
-
-  :global(body):has(.comparisonDock) {
-    padding-bottom: 8.55rem;
-  }
-
-  .comparisonSummary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-inline: 0.35rem;
-  }
-
-  .comparisonSummary span {
-    margin-top: 0;
+  .practiceControl {
+    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .workspace {
@@ -533,37 +617,19 @@
 }
 
 @media (max-width: 36rem) {
-  .main {
-    --comparison-dock-height: 8rem;
-    --comparison-dock-gap: 0.5rem;
-  }
-
   .comparisonDock {
-    padding: 0.5rem;
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    width: calc(100% - 1rem);
+    padding: 0.4rem;
   }
 
   :global(body):has(.comparisonDock) {
-    padding-bottom: 9rem;
-  }
-
-  .comparisonSummary {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
+    padding-bottom: 4.75rem;
   }
 
   .playbackControls {
     gap: 0.4rem;
     grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-  }
-
-  .practiceToggle {
-    min-height: 2.65rem;
-    grid-column: 1 / -1;
   }
 
   .sourceButton,
@@ -594,20 +660,37 @@
     padding-inline: 0.6rem;
   }
 
-  .restartLabel {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
+  .comparisonTrayHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .comparisonTrayHeading span {
+    max-width: 100%;
   }
 
   .sectionHeading {
     flex-direction: column;
   }
 
+  .practiceGate {
+    align-items: flex-start;
+    padding: 0.85rem;
+  }
+
   .controls button {
     flex: 1 1 calc(50% - 0.65rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comparisonDock {
+    animation: none;
+  }
+
+  .practiceSwitch,
+  .practiceSwitch > span {
+    transition: none;
   }
 }
