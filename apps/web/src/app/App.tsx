@@ -3,25 +3,16 @@ import { Link, Route, Routes } from 'react-router-dom'
 import { RecorderSpike } from '../components/RecorderSpike.js'
 import type { RecorderDependencies } from '../controller/browserCapabilities.js'
 import type { YouTubePlayerApi } from '../player/youTubePlayer.js'
-import { parseVideoConfiguration } from '../videoConfiguration.js'
 import styles from './App.module.css'
 
 export interface AppProps {
   playerApi?: YouTubePlayerApi | undefined
   recorderDependencies?: RecorderDependencies | undefined
-  videoId?: string | undefined
 }
 
-function HomePage({ playerApi, recorderDependencies, videoId }: AppProps) {
-  const configuredVideoId =
-    videoId === undefined ? import.meta.env.VITE_SHADOWING_VIDEO_ID : videoId
-
+function HomePage({ playerApi, recorderDependencies }: AppProps) {
   return (
-    <RecorderSpike
-      dependencies={recorderDependencies}
-      playerApi={playerApi}
-      videoConfiguration={parseVideoConfiguration(configuredVideoId)}
-    />
+    <RecorderSpike dependencies={recorderDependencies} playerApi={playerApi} />
   )
 }
 
@@ -39,11 +30,7 @@ function NotFoundPage() {
   )
 }
 
-export function App({
-  playerApi,
-  recorderDependencies,
-  videoId,
-}: AppProps = {}) {
+export function App({ playerApi, recorderDependencies }: AppProps = {}) {
   return (
     <div className={styles.app}>
       <a className={styles.skipLink} href="#main-content">
@@ -60,7 +47,7 @@ export function App({
           </span>
           <span>Shadowing Recorder</span>
         </Link>
-        <span className={styles.stage}>Stage 1 browser spike</span>
+        <span className={styles.stage}>Stage 2 URL loader</span>
       </header>
 
       <Routes>
@@ -70,7 +57,6 @@ export function App({
             <HomePage
               playerApi={playerApi}
               recorderDependencies={recorderDependencies}
-              videoId={videoId}
             />
           }
         />

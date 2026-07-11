@@ -20,8 +20,7 @@
   text-transform: uppercase;
 }
 
-.introduction h1,
-.configurationError h1 {
+.introduction h1 {
   max-width: 13ch;
   margin: 0;
   font-family: Georgia, 'Times New Roman', serif;
@@ -41,8 +40,7 @@
 
 .playerPanel,
 .recorderPanel,
-.diagnostics,
-.configurationError {
+.diagnostics {
   border: 1px solid var(--line);
   border-radius: 1.25rem;
   background: var(--paper);
@@ -69,7 +67,7 @@
   font-weight: 500;
 }
 
-.fixedBadge,
+.videoBadge,
 .microphoneStatus {
   display: inline-flex;
   flex: none;
@@ -81,6 +79,124 @@
   color: var(--ink);
   font-size: 0.78rem;
   font-weight: 750;
+}
+
+.videoLoader {
+  margin-bottom: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: #f8f3e9;
+}
+
+.videoLoader > label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.videoLoaderControls {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.videoLoaderControls input,
+.videoLoaderControls button {
+  min-height: 2.9rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.65rem;
+  font: inherit;
+}
+
+.videoLoaderControls input {
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  background: white;
+  color: var(--ink);
+}
+
+.videoLoaderControls input:focus-visible {
+  border-color: var(--accent);
+  outline: 0.18rem solid rgb(189 75 49 / 18%);
+  outline-offset: 0.08rem;
+}
+
+.videoLoaderControls button {
+  padding: 0.65rem 1rem;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.videoLoaderControls button:hover {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+}
+
+.videoLoader > p {
+  margin: 0.55rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.76rem;
+}
+
+.videoLoadStatus {
+  display: flex;
+  min-height: 3rem;
+  margin: 0 0 0.75rem;
+  align-items: baseline;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border-left: 0.25rem solid #637468;
+  background: var(--sage);
+  line-height: 1.4;
+}
+
+.videoLoadStatus[role='alert'] {
+  border-left-color: var(--accent);
+  background: #fbf0ec;
+}
+
+.videoLoadStatus strong {
+  flex: none;
+}
+
+.videoLoadStatus span {
+  color: var(--muted-ink);
+  font-size: 0.86rem;
+}
+
+.videoPlaceholder {
+  display: grid;
+  aspect-ratio: 16 / 9;
+  place-content: center;
+  justify-items: center;
+  gap: 0.8rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 18px;
+  background: #eef0ea;
+  color: var(--muted-ink);
+  text-align: center;
+}
+
+.videoPlaceholder > span {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: white;
+  font-size: 0.9rem;
+}
+
+.videoPlaceholder p {
+  max-width: 30ch;
+  margin: 0;
+  padding-inline: 1rem;
 }
 
 .microphoneStatus > span {
@@ -188,9 +304,14 @@
     box-shadow 160ms ease;
 }
 
-.practiceControl:hover {
+.practiceControl:hover:not(:disabled) {
   border-color: var(--accent-dark);
   background: var(--accent-dark);
+}
+
+.practiceControl:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .practiceControl[data-active='true'] {
@@ -587,20 +708,6 @@
   line-height: 1.65;
 }
 
-.configurationError {
-  width: min(100% - 2rem, 56rem);
-  margin: clamp(3rem, 10vw, 8rem) auto;
-  padding: clamp(1.5rem, 5vw, 3rem);
-}
-
-.configurationError [role='alert'] {
-  margin: 1.5rem 0 0;
-  padding: 1rem;
-  border-left: 0.3rem solid var(--accent);
-  background: #f8f3e9;
-  line-height: 1.6;
-}
-
 @media (max-width: 48rem) {
   .practiceGate {
     grid-template-columns: auto minmax(0, 1fr);
@@ -617,6 +724,16 @@
 }
 
 @media (max-width: 36rem) {
+  .videoLoaderControls {
+    grid-template-columns: 1fr;
+  }
+
+  .videoLoadStatus {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
   .comparisonDock {
     bottom: max(0.5rem, env(safe-area-inset-bottom));
     width: calc(100% - 1rem);

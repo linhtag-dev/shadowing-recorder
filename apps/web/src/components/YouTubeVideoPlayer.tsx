@@ -7,30 +7,44 @@ import {
   type YouTubePlayerError,
   type YouTubePlayerInstance,
 } from '../player/youTubePlayer.js'
-import { createFixedVideoEmbedUrl } from '../videoEmbed.js'
-import styles from './FixedVideoPlayer.module.css'
+import { createYouTubeEmbedUrl } from '../videoEmbed.js'
+import styles from './YouTubeVideoPlayer.module.css'
 
-export interface FixedVideoPlayerProps {
-  onError?: ((error: YouTubePlayerError) => void) | undefined
-  onPlaybackStateChange?: ((state: YouTubePlaybackState) => void) | undefined
-  onPlayerReady?: ((player: YouTubePlayerInstance | null) => void) | undefined
+export interface YouTubeVideoPlayerProps {
+  loadGeneration: number
+  onError?:
+    ((error: YouTubePlayerError, loadGeneration: number) => void) | undefined
+  onPlaybackStateChange?:
+    ((state: YouTubePlaybackState, loadGeneration: number) => void) | undefined
+  onPlayerReady?:
+    | ((player: YouTubePlayerInstance, loadGeneration: number) => void)
+    | undefined
   origin?: string | undefined
   playerApi?: YouTubePlayerApi | undefined
   videoId: string
 }
 
-export function FixedVideoPlayer({
+export function YouTubeVideoPlayer({
+  loadGeneration,
   onError,
   onPlaybackStateChange,
   onPlayerReady,
   origin = window.location.origin,
   playerApi = browserYouTubePlayerApi,
   videoId,
-}: FixedVideoPlayerProps) {
+}: YouTubeVideoPlayerProps) {
+  const callbacksRef = useRef({
+    onError,
+    onPlaybackStateChange,
+    onPlayerReady,
+  })
+  useEffect(() => {
+    callbacksRef.current = { onError, onPlaybackStateChange, onPlayerReady }
+  }, [onError, onPlaybackStateChange, onPlayerReady])
   const frameRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const embedUrl = useMemo(
-    () => createFixedVideoEmbedUrl(videoId, origin),
+    () => createYouTubeEmbedUrl(videoId, origin),
     [origin, videoId],
   )
 
@@ -41,7 +55,20 @@ export function FixedVideoPlayer({
     }
 
     const abortController = new AbortController()
+    const destroyedPlayers = new Set<YouTubePlayerInstance>()
     let player: YouTubePlayerInstance | null = null
+    const destroyPlayer = (target: YouTubePlayerInstance) => {
+      if (destroyedPlayers.has(target)) {
+        return
+      }
+
+      destroyedPlayers.add(target)
+      try {
+        target.destroy()
+      } catch {
+        // React still owns removal of the surrounding player subtree.
+      }
+    }
 
     void playerApi
       .create(
@@ -49,13 +76,16 @@ export function FixedVideoPlayer({
         {
           onError: (error) => {
             if (!abortController.signal.aborted) {
-              onError?.(error)
+              callbacksRef.current.onError?.(error, loadGeneration)
             }
           },
           onReady: (readyPlayer) => {
-            if (!abortController.signal.aborted) {
-              onPlayerReady?.(readyPlayer)
+            if (abortController.signal.aborted) {
+              destroyPlayer(readyPlayer)
+              return
             }
+
+            callbacksRef.current.onPlayerReady?.(readyPlayer, loadGeneration)
           },
           onStateChange: (state) => {
             if (!abortController.signal.aborted) {
@@ -65,7 +95,10 @@ export function FixedVideoPlayer({
               if (iframe.ownerDocument.activeElement === iframe) {
                 frameRef.current?.focus({ preventScroll: true })
               }
-              onPlaybackStateChange?.(state)
+              callbacksRef.current.onPlaybackStateChange?.(
+                state,
+                loadGeneration,
+              )
             }
           },
         },
@@ -73,11 +106,7 @@ export function FixedVideoPlayer({
       )
       .then((createdPlayer) => {
         if (abortController.signal.aborted) {
-          try {
-            createdPlayer.destroy()
-          } catch {
-            // React already owns removal of the surrounding player subtree.
-          }
+          destroyPlayer(createdPlayer)
           return
         }
 
@@ -91,25 +120,25 @@ export function FixedVideoPlayer({
           return
         }
 
-        onError?.({
-          code: null,
-          message:
-            error instanceof Error
-              ? error.message
-              : 'The YouTube player controls could not be loaded.',
-        })
+        callbacksRef.current.onError?.(
+          {
+            code: null,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'The YouTube player controls could not be loaded.',
+          },
+          loadGeneration,
+        )
       })
 
     return () => {
       abortController.abort()
-      onPlayerReady?.(null)
-      try {
-        player?.destroy()
-      } catch {
-        // React still owns removal of the surrounding player subtree.
+      if (player !== null) {
+        destroyPlayer(player)
       }
     }
-  }, [embedUrl, onError, onPlaybackStateChange, onPlayerReady, playerApi])
+  }, [embedUrl, loadGeneration, playerApi])
 
   return (
     <div className={styles.frame} ref={frameRef} tabIndex={-1}>

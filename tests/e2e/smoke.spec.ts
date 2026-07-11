@@ -108,9 +108,19 @@ test.beforeEach(async ({ page }) => {
       }
     }
 
+    let playerInstance: SyntheticYouTubePlayer | undefined
     let playerOptions: SyntheticPlayerOptions | undefined
+    const registerPlayerInstance = (instance: SyntheticYouTubePlayer) => {
+      playerInstance = instance
+    }
     class SyntheticYouTubePlayer {
-      constructor(_iframe: HTMLIFrameElement, options: SyntheticPlayerOptions) {
+      readonly videoId: string
+      playerState = -1
+
+      constructor(iframe: HTMLIFrameElement, options: SyntheticPlayerOptions) {
+        this.videoId =
+          new URL(iframe.src).pathname.split('/').filter(Boolean).at(-1) ?? ''
+        registerPlayerInstance(this)
         playerOptions = options
         queueMicrotask(() => {
           options.events.onReady({ data: undefined, target: this })
@@ -129,6 +139,14 @@ test.beforeEach(async ({ page }) => {
         return 32 * 60 + 38
       }
 
+      getPlayerState() {
+        return this.playerState
+      }
+
+      getVideoUrl() {
+        return `https://www.youtube.com/watch?v=${this.videoId}`
+      }
+
       pauseVideo() {
         ++diagnostics.playerPauseCalls
       }
@@ -144,13 +162,11 @@ test.beforeEach(async ({ page }) => {
 
     const player = {
       emitState: (state: number) => {
-        if (playerOptions !== undefined) {
+        if (playerOptions !== undefined && playerInstance !== undefined) {
+          playerInstance.playerState = state
           playerOptions.events.onStateChange({
             data: state,
-            target: {
-              destroy: () => undefined,
-              pauseVideo: () => undefined,
-            } as SyntheticYouTubePlayer,
+            target: playerInstance,
           })
         }
       },
@@ -171,20 +187,19 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test('serves the fixed-video recorder and API from one origin', async ({
-  page,
-}) => {
+test('loads a URL-first recorder and API from one origin', async ({ page }) => {
   let iframeRequestUrl: string | undefined
   await page.route('https://www.youtube-nocookie.com/**', async (route) => {
     iframeRequestUrl = route.request().url()
     await route.fulfill({
-      body: '<!doctype html><title>Intercepted fixed video</title><button type="button">Play video</button>',
+      body: '<!doctype html><title>Intercepted practice video</title><button type="button">Play video</button>',
       contentType: 'text/html',
       status: 200,
     })
   })
 
   await page.goto('/')
+  const applicationUrl = page.url()
 
   await expect(
     page.getByRole('heading', {
@@ -192,6 +207,19 @@ test('serves the fixed-video recorder and API from one origin', async ({
       name: 'Listen. Shadow. Play it back.',
     }),
   ).toBeVisible()
+
+  await expect(page.getByText('No video', { exact: true })).toBeVisible()
+  await expect(page.getByTitle('Shadowing practice video')).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Enable Practice Mode' }),
+  ).toBeDisabled()
+
+  await page
+    .getByLabel('YouTube video URL')
+    .fill('https://www.youtube.com/watch?v=stage1_test&t=23')
+  await page.getByRole('button', { name: 'Load video' }).click()
+  await expect(page.getByText('Video ready', { exact: true })).toBeVisible()
+  expect(page.url()).toBe(applicationUrl)
 
   const iframe = page.getByTitle('Shadowing practice video')
   await expect(iframe).toBeVisible()
@@ -212,6 +240,9 @@ test('serves the fixed-video recorder and API from one origin', async ({
 
   const inlineComparison = page.locator('[data-comparison-tray="inline"]')
   const floatingComparison = page.locator('[data-comparison-tray="floating"]')
+  const recorderPanel = page
+    .locator('[aria-label="Practice Mode controls"]')
+    .locator('..')
   const practiceToggle = page.getByRole('button', {
     name: 'Turn Practice Mode on',
   })
@@ -219,7 +250,7 @@ test('serves the fixed-video recorder and API from one origin', async ({
   await expect(floatingComparison).toHaveCount(0)
   await expect(practiceToggle).toHaveAttribute('aria-pressed', 'false')
   await practiceToggle.click()
-  await expect(page.getByRole('status')).toContainText(
+  await expect(recorderPanel.getByRole('status')).toContainText(
     'Play the video to start recording',
   )
   await expect(
@@ -249,7 +280,7 @@ test('serves the fixed-video recorder and API from one origin', async ({
       }
     ).__stageOnePlayerFake.emitState(1)
   })
-  await expect(page.getByRole('status')).toContainText(
+  await expect(recorderPanel.getByRole('status')).toContainText(
     'Recording your microphone',
   )
   await expect(iframe.locator('..')).toHaveCSS('outline-style', 'none')
@@ -273,7 +304,9 @@ test('serves the fixed-video recorder and API from one origin', async ({
       }
     ).__stageOnePlayerFake.emitState(3)
   })
-  await expect(page.getByRole('status')).toContainText('recording paused')
+  await expect(recorderPanel.getByRole('status')).toContainText(
+    'recording paused',
+  )
   await page.evaluate(() => {
     ;(
       window as typeof window & {

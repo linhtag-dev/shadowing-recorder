@@ -2,10 +2,6 @@ ARG NODE_VERSION=24.18.0
 
 FROM node:${NODE_VERSION}-bookworm-slim AS build
 
-ARG VITE_SHADOWING_VIDEO_ID
-
-ENV VITE_SHADOWING_VIDEO_ID=${VITE_SHADOWING_VIDEO_ID}
-
 WORKDIR /app
 
 COPY package.json package-lock.json ./

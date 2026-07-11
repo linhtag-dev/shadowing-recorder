@@ -15,9 +15,8 @@
   "scripts": {
     "build": "npm run build:contracts && npm run build --workspace=@shadowing-recorder/web && npm run build --workspace=@shadowing-recorder/api",
     "build:contracts": "npm run build --workspace=@shadowing-recorder/contracts",
-    "build:stage1-test": "VITE_SHADOWING_VIDEO_ID=stage1_test npm run build",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
-    "container:build": "docker build --build-arg VITE_SHADOWING_VIDEO_ID --tag shadowing-recorder:local .",
+    "container:build": "docker build --tag shadowing-recorder:local .",
     "container:run": "docker run --rm --publish 127.0.0.1:3000:3000 --name shadowing-recorder shadowing-recorder:local",
     "dev": "npm run build:contracts && concurrently --kill-others --names api,web --prefix-colors blue,green \"npm run dev --workspace=@shadowing-recorder/api\" \"npm run dev --workspace=@shadowing-recorder/web\"",
     "format": "prettier --write .",
@@ -26,7 +25,7 @@
     "preview": "npm run build && npm run start",
     "start": "npm run start --workspace=@shadowing-recorder/api",
     "test": "npm run build:contracts && vitest run",
-    "test:e2e": "npm run build:stage1-test && playwright test",
+    "test:e2e": "npm run build && playwright test",
     "typecheck": "npm run build:contracts && npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {

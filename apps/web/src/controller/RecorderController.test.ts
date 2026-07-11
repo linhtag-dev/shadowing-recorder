@@ -7,8 +7,12 @@ import {
   FakeStream,
   FakeTrack,
 } from '../test/recorderFakes.js'
+import { FakeYouTubePlayer } from '../test/playerFakes.js'
 import { selectRecorderMimeType } from './browserCapabilities.js'
-import { RecorderController } from './RecorderController.js'
+import {
+  RecorderController,
+  type RecorderPlayerBinding,
+} from './RecorderController.js'
 import { recorderMachine } from './recorderMachine.js'
 
 async function waitForState(
@@ -20,15 +24,60 @@ async function waitForState(
   })
 }
 
-async function enablePracticeMode(controller: RecorderController) {
-  controller.enable()
-  await waitForState(controller, 'armed')
+interface BoundTestPlayer {
+  binding: RecorderPlayerBinding
+  player: FakeYouTubePlayer
 }
 
-async function startPlayerDrivenAttempt(controller: RecorderController) {
-  await enablePracticeMode(controller)
-  controller.playerPlaying()
+function bindTestPlayer(
+  controller: RecorderController,
+  videoId = 'stage1_test',
+  loadGeneration = 1,
+): BoundTestPlayer {
+  const player = new FakeYouTubePlayer(videoId)
+  const binding = Object.freeze({
+    expectedVideoId: videoId,
+    getPlayerState: () => player.getPlayerState(),
+    getVideoUrl: () => player.getVideoUrl(),
+    loadGeneration,
+  })
+  expect(controller.bindPlayer(binding).status).toBe('valid')
+  return { binding, player }
+}
+
+function sendPlayerState(
+  controller: RecorderController,
+  boundPlayer: BoundTestPlayer,
+  state: 'buffering' | 'playing' | 'stopped',
+) {
+  boundPlayer.player.playerState =
+    state === 'playing' ? 1 : state === 'buffering' ? 3 : 2
+  if (state === 'playing') {
+    return controller.playerPlaying(boundPlayer.binding)
+  }
+  if (state === 'buffering') {
+    return controller.playerBuffering(boundPlayer.binding)
+  }
+  return controller.playerStopped(boundPlayer.binding)
+}
+
+async function enablePracticeMode(
+  controller: RecorderController,
+  boundPlayer = bindTestPlayer(controller),
+) {
+  controller.enable()
+  await waitForState(controller, 'armed')
+  return boundPlayer
+}
+
+async function startPlayerDrivenAttempt(
+  controller: RecorderController,
+  boundPlayer = bindTestPlayer(controller),
+) {
+  await enablePracticeMode(controller, boundPlayer)
+  sendPlayerState(controller, boundPlayer, 'playing')
   await waitForState(controller, 'recording')
+  return boundPlayer
 }
 
 function finishRecording(
@@ -36,9 +85,10 @@ function finishRecording(
   recorder: ReturnType<
     typeof createFakeRecorderEnvironment
   >['recorderFactory']['recorders'][number],
+  boundPlayer: BoundTestPlayer,
   contents = 'voice',
 ) {
-  controller.playerStopped()
+  sendPlayerState(controller, boundPlayer, 'stopped')
   recorder.emitData(new Blob([contents], { type: recorder.mimeType }))
   recorder.emitStop()
 }
@@ -94,10 +144,10 @@ describe('RecorderController', () => {
     )
     const controller = new RecorderController(environment.dependencies)
 
-    await enablePracticeMode(controller)
+    const boundPlayer = await enablePracticeMode(controller)
     expect(environment.recorderFactory.recorders).toHaveLength(0)
 
-    controller.playerPlaying()
+    sendPlayerState(controller, boundPlayer, 'playing')
     await waitForState(controller, 'recording')
 
     const recorder = environment.recorderFactory.recorders[0]
@@ -106,11 +156,11 @@ describe('RecorderController', () => {
       'audio/webm;codecs=opus',
     ])
 
-    controller.playerBuffering()
+    sendPlayerState(controller, boundPlayer, 'buffering')
     expect(controller.getSnapshot().state).toBe('buffering')
-    controller.playerPlaying()
+    sendPlayerState(controller, boundPlayer, 'playing')
     expect(controller.getSnapshot().state).toBe('recording')
-    controller.playerStopped()
+    sendPlayerState(controller, boundPlayer, 'stopped')
     expect(controller.getSnapshot().state).toBe('finalising')
 
     recorder?.emitData(new Blob([], { type: 'audio/webm;codecs=opus' }))
@@ -142,6 +192,7 @@ describe('RecorderController', () => {
         byteLength: 5,
         mimeType: 'audio/webm;codecs=opus',
         objectUrl: 'blob:recording-1',
+        videoId: 'stage1_test',
       },
       state: 'armed',
     })
@@ -165,16 +216,17 @@ describe('RecorderController', () => {
         resolvePermission = resolve
       })
     const controller = new RecorderController(environment.dependencies)
+    const boundPlayer = bindTestPlayer(controller)
 
-    controller.playerPlaying()
+    sendPlayerState(controller, boundPlayer, 'playing')
     controller.enable()
     expect(controller.getSnapshot().state).toBe('requestingMic')
-    controller.playerStopped()
+    sendPlayerState(controller, boundPlayer, 'stopped')
     resolvePermission?.(environment.stream)
     await waitForState(controller, 'armed')
     expect(environment.recorderFactory.recorders).toHaveLength(0)
 
-    controller.playerPlaying()
+    sendPlayerState(controller, boundPlayer, 'playing')
     expect(controller.getSnapshot().state).toBe('recording')
   })
 
@@ -184,6 +236,7 @@ describe('RecorderController', () => {
       throw new DOMException('denied', 'NotAllowedError')
     }
     const controller = new RecorderController(environment.dependencies)
+    bindTestPlayer(controller)
 
     controller.enable()
     await waitForState(controller, 'error')
@@ -211,6 +264,7 @@ describe('RecorderController', () => {
         environment.recorderFactory.available = false
       }
       const controller = new RecorderController(environment.dependencies)
+      bindTestPlayer(controller)
 
       controller.enable()
 
@@ -243,9 +297,9 @@ describe('RecorderController', () => {
     )
     const controller = new RecorderController(environment.dependencies)
 
-    await startPlayerDrivenAttempt(controller)
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
     const recorder = environment.recorderFactory.recorders[0]
-    controller.playerStopped()
+    sendPlayerState(controller, boundPlayer, 'stopped')
     recorder?.emitData(new Blob([]))
     expect(controller.getSnapshot().state).toBe('finalising')
     recorder?.emitStop()
@@ -294,10 +348,11 @@ describe('RecorderController', () => {
   it('bounds finalisation with a five-second watchdog and ignores late events', async () => {
     const environment = createFakeRecorderEnvironment()
     const controller = new RecorderController(environment.dependencies)
+    bindTestPlayer(controller)
 
-    await startPlayerDrivenAttempt(controller)
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
     const recorder = environment.recorderFactory.recorders[0]
-    controller.playerStopped()
+    sendPlayerState(controller, boundPlayer, 'stopped')
     expect(environment.clock.tasks.size).toBe(1)
     expect(environment.clock.delays).toEqual([5_000])
 
@@ -322,6 +377,7 @@ describe('RecorderController', () => {
         resolvePermission = resolve
       })
     const controller = new RecorderController(environment.dependencies)
+    bindTestPlayer(controller)
 
     controller.enable()
     expect(controller.getSnapshot().state).toBe('requestingMic')
@@ -339,10 +395,10 @@ describe('RecorderController', () => {
     const environment = createFakeRecorderEnvironment()
     const controller = new RecorderController(environment.dependencies)
 
-    await startPlayerDrivenAttempt(controller)
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
     const firstRecorder = environment.recorderFactory.recorders[0]
-    controller.playerStopped()
-    controller.playerPlaying()
+    sendPlayerState(controller, boundPlayer, 'stopped')
+    sendPlayerState(controller, boundPlayer, 'playing')
     firstRecorder?.emitData(new Blob(['first']))
     firstRecorder?.emitStop()
 
@@ -375,21 +431,21 @@ describe('RecorderController', () => {
     const environment = createFakeRecorderEnvironment()
     const controller = new RecorderController(environment.dependencies)
 
-    await startPlayerDrivenAttempt(controller)
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
     const firstRecorder = environment.recorderFactory.recorders[0]
     if (firstRecorder === undefined) {
       throw new Error('first recorder was not created')
     }
-    finishRecording(controller, firstRecorder, 'first')
+    finishRecording(controller, firstRecorder, boundPlayer, 'first')
     expect(controller.getSnapshot().result?.objectUrl).toBe('blob:recording-1')
 
-    controller.playerPlaying()
+    sendPlayerState(controller, boundPlayer, 'playing')
     await waitForState(controller, 'recording')
     const secondRecorder = environment.recorderFactory.recorders[1]
     if (secondRecorder === undefined) {
       throw new Error('second recorder was not created')
     }
-    finishRecording(controller, secondRecorder, 'second')
+    finishRecording(controller, secondRecorder, boundPlayer, 'second')
 
     expect(controller.getSnapshot().result?.objectUrl).toBe('blob:recording-2')
     expect(environment.objectUrls.revokedUrls).toEqual(['blob:recording-1'])
@@ -402,5 +458,120 @@ describe('RecorderController', () => {
       'blob:recording-2',
     ])
     expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+  })
+
+  it('rejects a player whose verified URL does not match its expected ID', () => {
+    const environment = createFakeRecorderEnvironment()
+    const controller = new RecorderController(environment.dependencies)
+    const player = new FakeYouTubePlayer('stage2_test')
+    const binding = Object.freeze({
+      expectedVideoId: 'stage1_test',
+      getPlayerState: () => player.getPlayerState(),
+      getVideoUrl: () => player.getVideoUrl(),
+      loadGeneration: 7,
+    })
+
+    expect(controller.bindPlayer(binding)).toEqual({
+      status: 'invalid',
+      message: expect.stringContaining('stage2_test'),
+    })
+    expect(controller.getSnapshot()).toMatchObject({
+      playerBindingError: {
+        loadGeneration: 7,
+        message: expect.stringContaining('instead of stage1_test'),
+      },
+      state: 'disabled',
+    })
+    controller.enable()
+    expect(environment.microphone.requestCalls).toBe(0)
+  })
+
+  it('revalidates identity immediately after microphone permission resolves', async () => {
+    const environment = createFakeRecorderEnvironment()
+    let resolvePermission: ((stream: FakeStream) => void) | undefined
+    environment.microphone.requestImplementation = () =>
+      new Promise((resolve) => {
+        resolvePermission = resolve
+      })
+    const controller = new RecorderController(environment.dependencies)
+    const boundPlayer = bindTestPlayer(controller)
+
+    controller.enable()
+    expect(controller.getSnapshot().state).toBe('requestingMic')
+    boundPlayer.player.videoUrl = 'https://www.youtube.com/watch?v=stage2_test'
+    resolvePermission?.(environment.stream)
+
+    await vi.waitFor(() => {
+      expect(controller.getSnapshot().state).toBe('disabled')
+      expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    })
+    expect(controller.getSnapshot().playerBindingError?.message).toContain(
+      'instead of stage1_test',
+    )
+    expect(environment.recorderFactory.recorders).toHaveLength(0)
+  })
+
+  it('finalises through an idempotent, awaitable player-change shutdown', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const controller = new RecorderController(environment.dependencies)
+
+    await startPlayerDrivenAttempt(controller)
+    const recorder = environment.recorderFactory.recorders[0]
+    const firstShutdown = controller.shutdownForPlayerChange()
+    const secondShutdown = controller.shutdownForPlayerChange()
+    let shutdownResolved = false
+    void firstShutdown.then(() => {
+      shutdownResolved = true
+    })
+
+    expect(secondShutdown).toBe(firstShutdown)
+    expect(controller.getSnapshot().state).toBe('finalising')
+    expect(shutdownResolved).toBe(false)
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(0)
+
+    recorder?.emitData(new Blob(['voice']))
+    recorder?.emitStop()
+    await firstShutdown
+
+    expect(shutdownResolved).toBe(true)
+    expect(controller.getSnapshot()).toMatchObject({
+      result: { videoId: 'stage1_test' },
+      state: 'disabled',
+    })
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+  })
+
+  it('bounds player-change shutdown with the existing finalisation watchdog', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const controller = new RecorderController(environment.dependencies)
+
+    await startPlayerDrivenAttempt(controller)
+    const shutdown = controller.shutdownForPlayerChange()
+    environment.clock.runAll()
+    await shutdown
+
+    expect(controller.getSnapshot()).toMatchObject({
+      errorMessage: expect.stringContaining('within five seconds'),
+      state: 'disabled',
+    })
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+  })
+
+  it('rejects stale callbacks after a newer player binding is active', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const controller = new RecorderController(environment.dependencies)
+    const firstPlayer = bindTestPlayer(controller, 'stage1_test', 1)
+
+    await controller.shutdownForPlayerChange()
+    const secondPlayer = bindTestPlayer(controller, 'stage2_test', 2)
+    expect(sendPlayerState(controller, firstPlayer, 'playing')).toEqual({
+      status: 'stale',
+    })
+
+    controller.enable()
+    await waitForState(controller, 'armed')
+    sendPlayerState(controller, secondPlayer, 'playing')
+    expect(controller.getSnapshot().state).toBe('recording')
+    expect(environment.recorderFactory.recorders).toHaveLength(1)
   })
 })

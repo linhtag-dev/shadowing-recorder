@@ -20,7 +20,20 @@ describe('parseYouTubePlaybackState', () => {
 })
 
 describe('describeYouTubePlayerError', () => {
-  it('provides a configuration-specific explanation for error 153', () => {
+  it.each([
+    [2, 'invalid or unavailable'],
+    [5, 'browser player'],
+    [100, 'unavailable or private'],
+    [101, 'does not allow embedded playback'],
+    [150, 'does not allow embedded playback'],
+  ] as const)('maps player error %s to %s guidance', (code, message) => {
+    expect(describeYouTubePlayerError(code)).toEqual({
+      code,
+      message: expect.stringContaining(message),
+    })
+  })
+
+  it('provides a deployment-identity explanation for error 153', () => {
     expect(describeYouTubePlayerError(153)).toEqual({
       code: 153,
       message:

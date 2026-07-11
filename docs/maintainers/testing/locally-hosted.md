@@ -7,26 +7,27 @@ the test.
 
 Never commit or paste tunnel tokens, Cloudflare Access browser-transfer URLs,
 Access tokens, application audience tags, account identifiers, tester
-identities, learner audio, or the developer-prechecked video ID into the
-repository, an issue, a chat, a screenshot, or a run log.
+identities, learner audio, or the externally selected full test video URL into
+the repository, an issue, a chat, a screenshot, or a run log.
 
 The tunnel is temporary test infrastructure. It does not settle the production
 hosting, authentication, privacy, secret-management, or monitoring decisions.
 
 ## Prepare the production container
 
-Keep the prechecked video ID and its verification date in the external operator
-run log. Build the container with that ID without adding it to the repository:
+Keep only the prechecked video ID and its verification date in the external
+operator run log. Hold the full URL separately for the scheduled test. The
+production bundle contains no selected video configuration:
 
 ```sh
-export VITE_SHADOWING_VIDEO_ID='<external-prechecked-video-id>'
 npm run container:build
 npm run container:run
 ```
 
 `container:run` remains attached to the terminal and publishes only
 `127.0.0.1:3000`. From another terminal, confirm the local origin before
-opening a tunnel:
+opening a tunnel. After authentication, paste the externally held URL into the
+in-page loader; do not put it in a shell variable, repository file, or run log:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:3000/api/health
@@ -197,7 +198,7 @@ At the end of the scheduled window:
 4. Clear the ephemeral shell state:
 
    ```sh
-   unset TUNNEL_TOKEN STAGE1_TUNNEL_ORIGIN VITE_SHADOWING_VIDEO_ID
+   unset TUNNEL_TOKEN STAGE1_TUNNEL_ORIGIN
    ```
 
 5. Confirm that no connector remains and that the root service was not

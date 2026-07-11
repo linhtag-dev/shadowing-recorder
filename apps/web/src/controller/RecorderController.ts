@@ -1,5 +1,10 @@
 import { createActor } from 'xstate'
 
+import {
+  parseYouTubePlaybackState,
+  type YouTubePlaybackState,
+} from '../player/youTubePlayer.js'
+import { parseYouTubeVideoUrl } from '../youtubeVideoUrl.js'
 import type {
   AppliedMicrophoneSettings,
   MicrophoneStream,
@@ -22,12 +27,39 @@ export interface CompletedRecording {
   byteLength: number
   mimeType: string
   objectUrl: string
+  videoId: string
+}
+
+export interface RecorderPlayerBinding {
+  readonly expectedVideoId: string
+  readonly getPlayerState: () => number
+  readonly getVideoUrl: () => string
+  readonly loadGeneration: number
+}
+
+export type PlayerBindingValidation =
+  | {
+      status: 'valid'
+      playbackState: YouTubePlaybackState
+    }
+  | {
+      status: 'stale'
+    }
+  | {
+      status: 'invalid'
+      message: string
+    }
+
+export interface PlayerBindingError {
+  loadGeneration: number
+  message: string
 }
 
 export interface RecorderControllerSnapshot {
   errorMessage: string | null
   eventOrder: readonly string[]
   microphoneSettings: AppliedMicrophoneSettings | null
+  playerBindingError: PlayerBindingError | null
   recordedByteCount: number
   recorderMimeType: string | null
   result: CompletedRecording | null
@@ -40,6 +72,7 @@ interface ActiveAttempt {
   finalisationRequested: boolean
   generation: number
   recorder: RecorderAdapter
+  videoId: string
   watchdogActive: boolean
   watchdogHandle: unknown
 }
@@ -94,12 +127,18 @@ export class RecorderController {
   #disposed = false
   #generation = 0
   #intentionalTrackShutdown = false
+  #playerBinding: RecorderPlayerBinding | null = null
+  #playerChangeShutdown: {
+    promise: Promise<void>
+    resolve: () => void
+  } | null = null
   #playerState: PlayerPlaybackState = 'stopped'
   #practiceEnabled = false
   #snapshot: RecorderControllerSnapshot = {
     errorMessage: null,
     eventOrder: [],
     microphoneSettings: null,
+    playerBindingError: null,
     recordedByteCount: 0,
     recorderMimeType: null,
     result: null,
@@ -125,6 +164,25 @@ export class RecorderController {
     }
   }
 
+  bindPlayer(binding: RecorderPlayerBinding): PlayerBindingValidation {
+    if (this.#disposed) {
+      return { status: 'stale' }
+    }
+
+    const validation = this.#readPlayerBinding(binding)
+    if (validation.status !== 'valid') {
+      if (validation.status === 'invalid') {
+        this.#invalidatePlayerBinding(binding, validation.message)
+      }
+      return validation
+    }
+
+    this.#playerBinding = binding
+    this.#playerState = this.#toControllerPlayerState(validation.playbackState)
+    this.#publish({ playerBindingError: null })
+    return validation
+  }
+
   enable() {
     if (
       this.#disposed ||
@@ -132,6 +190,18 @@ export class RecorderController {
     ) {
       return
     }
+
+    const binding = this.#playerBinding
+    if (binding === null) {
+      return
+    }
+
+    const validation = this.#validateCurrentPlayerBinding(binding)
+    if (validation.status !== 'valid') {
+      return
+    }
+
+    this.#playerState = this.#toControllerPlayerState(validation.playbackState)
 
     const generation = ++this.#generation
     this.#practiceEnabled = true
@@ -185,52 +255,74 @@ export class RecorderController {
     this.#actor.send({ type: 'DISABLE' })
   }
 
-  playerPlaying() {
-    if (this.#disposed) {
-      return
-    }
-
-    this.#playerState = 'playing'
-
-    if (!this.#practiceEnabled) {
-      return
-    }
-
-    if (this.#snapshot.state === 'armed') {
-      this.#startAttempt()
-      return
-    }
-
-    if (this.#snapshot.state === 'buffering') {
-      this.#resumeAttempt()
-    }
+  playerPlaying(binding: RecorderPlayerBinding) {
+    return this.#handlePlayerStateChange(binding)
   }
 
-  playerBuffering() {
-    if (this.#disposed) {
-      return
-    }
-
-    this.#playerState = 'buffering'
-
-    if (this.#practiceEnabled && this.#snapshot.state === 'recording') {
-      this.#pauseAttempt()
-    }
+  playerBuffering(binding: RecorderPlayerBinding) {
+    return this.#handlePlayerStateChange(binding)
   }
 
-  playerStopped() {
-    if (this.#disposed) {
-      return
+  playerStopped(binding: RecorderPlayerBinding) {
+    return this.#handlePlayerStateChange(binding)
+  }
+
+  validatePlaybackAction(binding: RecorderPlayerBinding) {
+    const validation = this.#validateCurrentPlayerBinding(binding)
+    if (validation.status === 'valid') {
+      this.#playerState = this.#toControllerPlayerState(
+        validation.playbackState,
+      )
     }
 
+    return validation
+  }
+
+  shutdownForPlayerChange(): Promise<void> {
+    if (this.#disposed) {
+      return Promise.resolve()
+    }
+
+    this.#playerBinding = null
     this.#playerState = 'stopped'
 
-    if (
-      this.#practiceEnabled &&
-      ['buffering', 'recording'].includes(this.#snapshot.state)
-    ) {
-      this.#requestFinalisation()
+    if (this.#playerChangeShutdown !== null) {
+      return this.#playerChangeShutdown.promise
     }
+
+    let resolveShutdown: () => void = () => {
+      // Assigned by the promise constructor below.
+    }
+    const promise = new Promise<void>((resolve) => {
+      resolveShutdown = resolve
+    })
+    this.#playerChangeShutdown = { promise, resolve: resolveShutdown }
+    this.#practiceEnabled = false
+
+    if (
+      ['buffering', 'recording'].includes(this.#snapshot.state) &&
+      this.#activeAttempt !== null
+    ) {
+      this.#disableAfterFinalisation = true
+      this.#requestFinalisation()
+      return promise
+    }
+
+    if (this.#snapshot.state === 'finalising') {
+      this.#disableAfterFinalisation = true
+      return promise
+    }
+
+    ++this.#generation
+    this.#disableAfterFinalisation = false
+    this.#intentionalTrackShutdown = true
+    this.#stopCurrentStream()
+    this.#publish({ errorMessage: null })
+    if (this.#snapshot.state !== 'disabled') {
+      this.#actor.send({ type: 'DISABLE' })
+    }
+    this.#settlePlayerChangeShutdown()
+    return promise
   }
 
   interrupt(message: string) {
@@ -268,6 +360,8 @@ export class RecorderController {
 
     this.#disposed = true
     this.#practiceEnabled = false
+    this.#playerBinding = null
+    this.#playerState = 'stopped'
     ++this.#generation
     this.#intentionalTrackShutdown = true
     this.#releaseActiveAttempt(true)
@@ -275,6 +369,142 @@ export class RecorderController {
     this.discardCompletedRecording()
     this.#actor.stop()
     this.#listeners.clear()
+    const shutdown = this.#playerChangeShutdown
+    this.#playerChangeShutdown = null
+    shutdown?.resolve()
+  }
+
+  #handlePlayerStateChange(
+    binding: RecorderPlayerBinding,
+  ): PlayerBindingValidation {
+    const validation = this.#validateCurrentPlayerBinding(binding)
+    if (validation.status !== 'valid') {
+      return validation
+    }
+
+    const playerState = this.#toControllerPlayerState(validation.playbackState)
+    this.#playerState = playerState
+
+    if (!this.#practiceEnabled) {
+      return validation
+    }
+
+    if (playerState === 'playing') {
+      if (this.#snapshot.state === 'armed') {
+        this.#startAttempt()
+      } else if (this.#snapshot.state === 'buffering') {
+        this.#resumeAttempt()
+      }
+      return validation
+    }
+
+    if (playerState === 'buffering') {
+      if (this.#snapshot.state === 'recording') {
+        this.#pauseAttempt()
+      }
+      return validation
+    }
+
+    if (['buffering', 'recording'].includes(this.#snapshot.state)) {
+      this.#requestFinalisation()
+    }
+    return validation
+  }
+
+  #readPlayerBinding(binding: RecorderPlayerBinding): PlayerBindingValidation {
+    let playerUrl: string
+    try {
+      playerUrl = binding.getVideoUrl()
+    } catch {
+      return {
+        status: 'invalid',
+        message:
+          'The YouTube player could not verify the requested video. Remove the player and load the URL again.',
+      }
+    }
+
+    const parsedUrl = parseYouTubeVideoUrl(playerUrl)
+    if (parsedUrl.status !== 'valid') {
+      return {
+        status: 'invalid',
+        message:
+          'The YouTube player returned an unverified video URL. The player was removed; load the video again.',
+      }
+    }
+
+    if (parsedUrl.videoId !== binding.expectedVideoId) {
+      return {
+        status: 'invalid',
+        message: `The player loaded video ${parsedUrl.videoId} instead of ${binding.expectedVideoId}. The player was removed; load the intended video again.`,
+      }
+    }
+
+    let state: number
+    try {
+      state = binding.getPlayerState()
+    } catch {
+      return {
+        status: 'invalid',
+        message:
+          'The YouTube player could not report its playback state. The player was removed; load the video again.',
+      }
+    }
+
+    return {
+      status: 'valid',
+      playbackState: parseYouTubePlaybackState(state) ?? 'unstarted',
+    }
+  }
+
+  #validateCurrentPlayerBinding(
+    binding: RecorderPlayerBinding,
+  ): PlayerBindingValidation {
+    if (this.#disposed || this.#playerBinding !== binding) {
+      return { status: 'stale' }
+    }
+
+    const validation = this.#readPlayerBinding(binding)
+    if (validation.status === 'invalid') {
+      this.#invalidatePlayerBinding(binding, validation.message)
+    }
+    return validation
+  }
+
+  #invalidatePlayerBinding(binding: RecorderPlayerBinding, message: string) {
+    if (this.#playerBinding !== null && this.#playerBinding !== binding) {
+      return
+    }
+
+    this.#publish({
+      playerBindingError: {
+        loadGeneration: binding.loadGeneration,
+        message,
+      },
+    })
+    void this.shutdownForPlayerChange()
+  }
+
+  #toControllerPlayerState(state: YouTubePlaybackState): PlayerPlaybackState {
+    if (state === 'playing') {
+      return 'playing'
+    }
+    if (state === 'buffering') {
+      return 'buffering'
+    }
+    return 'stopped'
+  }
+
+  #settlePlayerChangeShutdown() {
+    if (
+      this.#playerChangeShutdown === null ||
+      (!this.#disposed && this.#snapshot.state !== 'disabled')
+    ) {
+      return
+    }
+
+    const shutdown = this.#playerChangeShutdown
+    this.#playerChangeShutdown = null
+    shutdown.resolve()
   }
 
   async #requestMicrophone(generation: number) {
@@ -293,15 +523,26 @@ export class RecorderController {
       return
     }
 
+    const binding = this.#playerBinding
+    const bindingValidation =
+      binding === null
+        ? ({ status: 'stale' } as const)
+        : this.#validateCurrentPlayerBinding(binding)
+
     if (
       this.#disposed ||
       !this.#practiceEnabled ||
       generation !== this.#generation ||
-      this.#snapshot.state !== 'requestingMic'
+      this.#snapshot.state !== 'requestingMic' ||
+      bindingValidation.status !== 'valid'
     ) {
       this.#stopStream(stream)
       return
     }
+
+    this.#playerState = this.#toControllerPlayerState(
+      bindingValidation.playbackState,
+    )
 
     this.#stream = stream
     this.#intentionalTrackShutdown = false
@@ -323,13 +564,23 @@ export class RecorderController {
 
   #startAttempt() {
     const stream = this.#stream
+    const binding = this.#playerBinding
 
     if (
       this.#disposed ||
       !this.#practiceEnabled ||
       this.#playerState !== 'playing' ||
       this.#snapshot.state !== 'armed' ||
-      stream === null
+      stream === null ||
+      binding === null
+    ) {
+      return
+    }
+
+    const bindingValidation = this.#validateCurrentPlayerBinding(binding)
+    if (
+      bindingValidation.status !== 'valid' ||
+      bindingValidation.playbackState !== 'playing'
     ) {
       return
     }
@@ -352,6 +603,7 @@ export class RecorderController {
       finalisationRequested: false,
       generation: this.#generation,
       recorder,
+      videoId: binding.expectedVideoId,
       watchdogActive: false,
       watchdogHandle: undefined,
     }
@@ -395,11 +647,21 @@ export class RecorderController {
 
   #resumeAttempt() {
     const attempt = this.#activeAttempt
+    const binding = this.#playerBinding
 
     if (
       this.#disposed ||
       this.#snapshot.state !== 'buffering' ||
-      attempt === null
+      attempt === null ||
+      binding === null
+    ) {
+      return
+    }
+
+    const bindingValidation = this.#validateCurrentPlayerBinding(binding)
+    if (
+      bindingValidation.status !== 'valid' ||
+      bindingValidation.playbackState !== 'playing'
     ) {
       return
     }
@@ -562,6 +824,7 @@ export class RecorderController {
       byteLength: blob.size,
       mimeType: blob.type || 'Browser default',
       objectUrl,
+      videoId: attempt.videoId,
     }
 
     this.#releaseActiveAttempt(false)
@@ -581,6 +844,7 @@ export class RecorderController {
       this.#intentionalTrackShutdown = true
       this.#stopCurrentStream()
       this.#actor.send({ type: 'FINALISED_DISABLED' })
+      this.#settlePlayerChangeShutdown()
       return
     }
 
@@ -604,6 +868,10 @@ export class RecorderController {
     this.#stopCurrentStream()
     this.#publish({ errorMessage: message })
     this.#actor.send({ type: 'FAILURE' })
+    if (this.#playerChangeShutdown !== null) {
+      this.#actor.send({ type: 'DISABLE' })
+      this.#settlePlayerChangeShutdown()
+    }
   }
 
   #releaseActiveAttempt(stopRecorder: boolean) {

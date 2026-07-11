@@ -1,8 +1,8 @@
 # Shadowing Recorder
 
-Shadowing Recorder is a browser-first language practice tool. The current non-public browser build embeds one developer-prechecked video, connects its native play/pause state to microphone recording, and plays back only the latest recording locally.
+Shadowing Recorder is a browser-first language practice tool. The current non-public browser build accepts a supported YouTube URL, connects the verified player's native play/pause state to microphone recording, and plays back only the latest recording locally.
 
-This build intentionally has no arbitrary URL input, eligibility request, YouTube Data API credential, consent flow, or learner-audio server route.
+URL parsing, player traffic, microphone capture, and recording playback remain client-side. This focused build intentionally has no eligibility request, YouTube Data API credential, consent flow, public policy pages, multi-attempt list, or learner-audio server route.
 
 ## Audience and privacy boundary
 
@@ -20,23 +20,17 @@ The accepted production direction is a static web app with no YouTube Data API i
 
 With `nvm`, run `nvm use` before installing. Other Node version managers can read `.node-version`.
 
-## Fixed-video configuration
+## Video loading
 
-`VITE_SHADOWING_VIDEO_ID` is an optional build-time setting. Its trimmed value must match `[A-Za-z0-9_-]{11}`. A missing or invalid value deliberately produces a disabled page with no video iframe and no microphone controls.
+The app starts with no player. Paste an HTTPS YouTube watch, `youtu.be`, Shorts, or embed URL and select **Load video**. The input and extracted 11-character video ID remain only in React memory; loading does not modify the application path, query, fragment, or browser history and does not call the application server.
 
-Supply a developer-prechecked ID without committing it:
-
-```sh
-export VITE_SHADOWING_VIDEO_ID='<11-character-video-id>'
-```
-
-Alternatively, copy `.env.example` to the ignored root `.env` and uncomment the setting. Vite reads the repository root as its environment directory. The ID is not a credential, but the Stage 1 operator still keeps the selected test fixture out of version control.
+Every submission replaces the prior player generation, including invalid or repeated URLs. Practice Mode stays unavailable until the new player reports ready and its current URL resolves to the requested ID. A completed recording survives video changes with its original source ID, but quick A/B controls are available only when that ID matches the ready video.
 
 ## Local development
 
 ```sh
 npm ci
-VITE_SHADOWING_VIDEO_ID="$VITE_SHADOWING_VIDEO_ID" npm run dev
+npm run dev
 ```
 
 Open <http://127.0.0.1:5173>. Vite serves the web application and proxies same-origin `/api/*` requests to Hono at `http://127.0.0.1:3000`. Microphone access works through the browser's localhost secure-context exception.
@@ -47,20 +41,16 @@ Because headphones are required, microphone capture explicitly requests echo can
 
 ## Production preview
 
-The video ID is compiled into the browser bundle, so provide it to the build rather than the runtime server:
-
 ```sh
-VITE_SHADOWING_VIDEO_ID="$VITE_SHADOWING_VIDEO_ID" npm run preview
+npm run preview
 ```
 
 Open <http://127.0.0.1:3000>. Hono serves both `/api/health` and the built Vite assets from one process.
 
 ## Container
 
-The npm command passes `VITE_SHADOWING_VIDEO_ID` through the Docker build argument with the same name:
-
 ```sh
-VITE_SHADOWING_VIDEO_ID="$VITE_SHADOWING_VIDEO_ID" npm run container:build
+npm run container:build
 npm run container:run
 curl --fail --silent --show-error http://127.0.0.1:3000/api/health
 ```
@@ -75,9 +65,9 @@ npx playwright install chromium firefox webkit
 npm run test:e2e
 ```
 
-`npm run check` runs formatting checks, linting, strict TypeScript checks, Vitest projects, and production builds. A normal production build has no fixed ID unless the operator supplies one and therefore validates the disabled state.
+`npm run check` runs formatting checks, linting, strict TypeScript checks, Vitest projects, and production builds. Production bundles contain no selected video ID.
 
-`npm run test:e2e` builds with the clearly synthetic `stage1_test` fixture, intercepts the iframe request, injects YouTube-player, microphone, and MediaRecorder fakes, and verifies the player-driven play/buffer/resume/pause/playback flow in Chromium, Firefox, and WebKit. CI never contacts live YouTube or requests a real microphone.
+`npm run test:e2e` submits a URL containing the clearly synthetic `stage1_test` fixture, confirms that the application URL is unchanged, intercepts the privacy-enhanced iframe request, injects YouTube-player, microphone, and MediaRecorder fakes, and verifies the player-driven play/buffer/resume/pause/playback flow in Chromium, Firefox, and WebKit. CI never contacts live YouTube or requests a real microphone.
 
 ## Real-browser verification
 

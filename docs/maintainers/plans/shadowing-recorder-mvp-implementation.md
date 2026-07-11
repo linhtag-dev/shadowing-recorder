@@ -34,27 +34,29 @@ After the local container and fixed-video proof of concept work, select a static
 
 ## Stage 2: Public embed and policy foundation
 
+Status: In progress. The local URL loader, privacy-enhanced dynamic embed, load-generation replacement transaction, exact player-identity boundary, and source-labelled latest recording were completed on 2026-07-12. Consent, public terms/privacy links, official attribution, and the other launch-policy work in this stage remain pending; this build therefore remains non-public.
+
 - App terms, privacy policy, required links, and versioned acceptance gate.
 - Compliant `Shadowing Recorder` naming and official `Developed with YouTube` attribution.
 - Explicit general-audience, non-child-directed and non-child-oriented positioning.
 - Explicit disclosure that the app has no analytics, advertising trackers, telemetry, accounts, or operator-side collection of URLs, playback activity, diagnostics, consent state, or learner audio.
-- URL parsing and validation.
-- In-page YouTube URL input and explicit `Load video` action, with the selected ID held only in session-local browser state and no application-URL mutation.
-- Direct privacy-enhanced iframe creation from a locally validated ID, with no YouTube Data API integration or application backend.
-- Client-side `loadGeneration`, exact player-identity checks, stale-player destruction, and replacement safety.
-- Correct `origin`, Referer policy, native controls, `autoplay=0`, and IFrame error handling including error `153`.
+- URL parsing and validation. Completed for the supported HTTPS watch, `youtu.be`, Shorts, and embed forms on 2026-07-12.
+- In-page YouTube URL input and explicit `Load video` action, with the selected ID held only in session-local browser state and no application-URL mutation. Completed 2026-07-12.
+- Direct privacy-enhanced iframe creation from a locally validated ID, with no YouTube Data API integration or application backend. Completed 2026-07-12.
+- Client-side `loadGeneration`, exact player-identity checks, stale-player destruction, and replacement safety. Completed for the latest-recording slice on 2026-07-12.
+- Correct `origin`, Referer policy, native controls, `autoplay=0`, and IFrame error handling including error `153`. Completed 2026-07-12.
 
 ## Stage 3: Automatic recording controller
 
-Status: In progress. The fixed-video build now loads the YouTube IFrame Player API and connects `PLAYING`, `BUFFERING`, `PAUSED`, and `ENDED` events to an explicitly enabled Practice Mode. The remaining Stage 3 items below still require the local video-load/player-identity boundary, timing ownership, and attempt-list implementation.
+Status: In progress. The dynamic-video build loads the YouTube IFrame Player API and connects `PLAYING`, `BUFFERING`, `PAUSED`, and `ENDED` events to an explicitly enabled Practice Mode. The local video-load/player-identity boundary and post-permission reconciliation are complete; timing ownership, resource limits, consent/headphone confirmation, and the attempt-list implementation remain.
 
 Chrome's default microphone processing produced choppy learner audio during audible reference playback while muted Chrome playback and Safari on the same Mac were clean. The fixed-video capture now requests echo cancellation, noise suppression, and automatic gain control off and reports the browser-applied settings in diagnostics; this correction was implemented on 2026-07-12.
 
 - YouTube IFrame Player API integration. Initial fixed-video integration completed 2026-07-11.
 - Headphone confirmation and Practice Mode.
 - Serialized `requestingMic`, `armed`, `recording`, `buffering`, and `finalising` states. Initial fixed-video state flow completed 2026-07-11.
-- Post-permission reconciliation and expected-video identity checks. Playback reconciliation completed 2026-07-11; replacement-player identity checks remain tied to the Stage 2 local load boundary.
-- Attempt-scoped recorder/chunk ownership and asynchronous finalisation. Latest-attempt fixed-video slice completed 2026-07-11; the attempt list remains pending.
+- Post-permission reconciliation and expected-video identity checks. Playback reconciliation completed 2026-07-11; generation-scoped replacement and identity validation completed 2026-07-12.
+- Attempt-scoped recorder/chunk ownership and asynchronous finalisation. The latest recording now retains its immutable source video ID across replacement; the attempt list remains pending.
 - Draft/generation-scoped timers, operation-token cleanup, and a five-second finalisation watchdog.
 - One-audio-source playback interlock.
 - Attempt list with approximate, discontinuous, and uncertain timing labels.

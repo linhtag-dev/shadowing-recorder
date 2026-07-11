@@ -5,6 +5,8 @@ export interface YouTubePlayerInstance {
   destroy(): void
   getCurrentTime(): number
   getDuration(): number
+  getPlayerState(): number
+  getVideoUrl(): string
   pauseVideo(): void
   playVideo(): void
   seekTo(seconds: number, allowSeekAhead: boolean): void
@@ -158,7 +160,8 @@ export function describeYouTubePlayerError(code: number): YouTubePlayerError {
     case 2:
       return {
         code,
-        message: 'The configured video ID is not valid for the YouTube player.',
+        message:
+          'The requested video is invalid or unavailable. Check the URL and try another video.',
       }
     case 5:
       return {
@@ -201,12 +204,27 @@ export const browserYouTubePlayerApi: YouTubePlayerApi = {
     return new namespace.Player(iframe, {
       events: {
         onError: (event) => {
-          callbacks.onError(describeYouTubePlayerError(event.data))
+          if (!signal.aborted) {
+            callbacks.onError(describeYouTubePlayerError(event.data))
+          }
         },
         onReady: (event) => {
+          if (signal.aborted) {
+            try {
+              event.target.destroy()
+            } catch {
+              // The stale iframe may already have been removed by React.
+            }
+            return
+          }
+
           callbacks.onReady(event.target)
         },
         onStateChange: (event) => {
+          if (signal.aborted) {
+            return
+          }
+
           const state = parseYouTubePlaybackState(event.data)
           if (state !== null) {
             callbacks.onStateChange(state)

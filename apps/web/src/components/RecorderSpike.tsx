@@ -1,4 +1,5 @@
 import {
+  type FormEvent,
   useCallback,
   useEffect,
   useRef,
@@ -8,7 +9,10 @@ import {
 
 import type { RecorderDependencies } from '../controller/browserCapabilities.js'
 import { createBrowserRecorderDependencies } from '../controller/browserCapabilities.js'
-import { RecorderController } from '../controller/RecorderController.js'
+import {
+  RecorderController,
+  type RecorderPlayerBinding,
+} from '../controller/RecorderController.js'
 import type { RecorderState } from '../controller/recorderMachine.js'
 import type {
   YouTubePlaybackState,
@@ -16,16 +20,26 @@ import type {
   YouTubePlayerError,
   YouTubePlayerInstance,
 } from '../player/youTubePlayer.js'
-import type { VideoConfiguration } from '../videoConfiguration.js'
-import { FixedVideoPlayer } from './FixedVideoPlayer.js'
+import { parseYouTubeVideoUrl } from '../youtubeVideoUrl.js'
+import { YouTubeVideoPlayer } from './YouTubeVideoPlayer.js'
 import styles from './RecorderSpike.module.css'
 
 export interface RecorderSpikeProps {
   dependencies?: RecorderDependencies | undefined
   origin?: string | undefined
   playerApi?: YouTubePlayerApi | undefined
-  videoConfiguration: VideoConfiguration
 }
+
+interface SelectedVideo {
+  generation: number
+  videoId: string
+}
+
+type VideoLoadState =
+  | { status: 'empty' }
+  | { status: 'loading'; videoId: string }
+  | { status: 'ready'; videoId: string }
+  | { status: 'error'; message: string }
 
 const statusMessages: Record<RecorderState, string> = {
   armed: 'Ready. Play the video to start recording.',
@@ -213,51 +227,16 @@ export function RecorderSpike({
   dependencies,
   origin,
   playerApi,
-  videoConfiguration,
 }: RecorderSpikeProps) {
-  if (videoConfiguration.status !== 'configured') {
-    return (
-      <main
-        id="main-content"
-        className={styles.configurationError}
-        aria-labelledby="spike-title"
-      >
-        <p className={styles.kicker}>Stage 1 · Non-public browser spike</p>
-        <h1 id="spike-title">Recorder configuration required</h1>
-        <p role="alert">{videoConfiguration.message}</p>
-      </main>
-    )
-  }
-
-  return (
-    <ConfiguredRecorderSpike
-      dependencies={dependencies}
-      origin={origin}
-      playerApi={playerApi}
-      videoId={videoConfiguration.videoId}
-    />
-  )
-}
-
-interface ConfiguredRecorderSpikeProps {
-  dependencies?: RecorderDependencies | undefined
-  origin?: string | undefined
-  playerApi?: YouTubePlayerApi | undefined
-  videoId: string
-}
-
-function ConfiguredRecorderSpike({
-  dependencies,
-  origin,
-  playerApi,
-  videoId,
-}: ConfiguredRecorderSpikeProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const comparisonTrayRef = useRef<HTMLElement>(null)
   const dockBoundaryRef = useRef<HTMLDivElement>(null)
   const lifecycle = useRef({ generation: 0 })
+  const loadGeneration = useRef(0)
   const pendingComparisonPlayback = useRef(false)
+  const playerBindingRef = useRef<RecorderPlayerBinding | null>(null)
   const playerRef = useRef<YouTubePlayerInstance | null>(null)
+  const selectedVideoRef = useRef<SelectedVideo | null>(null)
   const [activePlayback, setActivePlayback] =
     useState<PlaybackSource>('reference')
   const [audioIsPlaying, setAudioIsPlaying] = useState(false)
@@ -265,13 +244,17 @@ function ConfiguredRecorderSpike({
   const [comparisonTrayHasFocus, setComparisonTrayHasFocus] = useState(false)
   const [comparisonTrayHasPassed, setComparisonTrayHasPassed] = useState(false)
   const [dockBoundaryIsVisible, setDockBoundaryIsVisible] = useState(false)
-  const [playerError, setPlayerError] = useState<string | null>(null)
   const [playerIsReady, setPlayerIsReady] = useState(false)
   const [playerPlaybackState, setPlayerPlaybackState] =
     useState<YouTubePlaybackState>('unstarted')
   const [referenceProgress, setReferenceProgress] = useState(
     emptyPlaybackProgress,
   )
+  const [selectedVideo, setSelectedVideo] = useState<SelectedVideo | null>(null)
+  const [videoLoadState, setVideoLoadState] = useState<VideoLoadState>({
+    status: 'empty',
+  })
+  const [videoUrl, setVideoUrl] = useState('')
   const [controller] = useState(
     () =>
       new RecorderController(
@@ -402,53 +385,167 @@ function ConfiguredRecorderSpike({
     }
   }, [controller])
 
-  const handlePlaybackStateChange = useCallback(
-    (state: YouTubePlaybackState) => {
-      setPlayerError(null)
-      setPlayerPlaybackState(state)
-
-      switch (state) {
-        case 'playing':
-          pendingComparisonPlayback.current = false
-          stopAudio(audioRef.current)
-          setActivePlayback('reference')
-          setAudioIsPlaying(false)
-          setAudioProgress(emptyPlaybackProgress)
-          controller.playerPlaying()
-          break
-        case 'buffering':
-          controller.playerBuffering()
-          break
-        case 'cued':
-        case 'ended':
-        case 'paused':
-        case 'unstarted':
-          controller.playerStopped()
-          break
+  const handlePlayerFailure = useCallback(
+    (generation: number, message: string) => {
+      if (generation !== loadGeneration.current) {
+        return
       }
+
+      try {
+        playerRef.current?.pauseVideo()
+      } catch {
+        // Player teardown below remains the fail-safe.
+      }
+      stopAudio(audioRef.current)
+      pendingComparisonPlayback.current = false
+      playerBindingRef.current = null
+      playerRef.current = null
+      selectedVideoRef.current = null
+      setSelectedVideo(null)
+      setAudioIsPlaying(false)
+      setPlayerIsReady(false)
+      setPlayerPlaybackState('unstarted')
+      setReferenceProgress(emptyPlaybackProgress)
+      setVideoLoadState({ status: 'error', message })
+      void controller.shutdownForPlayerChange()
     },
     [controller],
+  )
+
+  const handlePlaybackStateChange = useCallback(
+    (state: YouTubePlaybackState, generation: number) => {
+      const binding = playerBindingRef.current
+      if (
+        generation !== loadGeneration.current ||
+        binding === null ||
+        binding.loadGeneration !== generation
+      ) {
+        return
+      }
+
+      const validation =
+        state === 'playing'
+          ? controller.playerPlaying(binding)
+          : state === 'buffering'
+            ? controller.playerBuffering(binding)
+            : controller.playerStopped(binding)
+      if (validation.status === 'invalid') {
+        handlePlayerFailure(generation, validation.message)
+        return
+      }
+      if (validation.status !== 'valid') {
+        return
+      }
+
+      setPlayerPlaybackState(validation.playbackState)
+      if (validation.playbackState === 'playing') {
+        pendingComparisonPlayback.current = false
+        stopAudio(audioRef.current)
+        setActivePlayback('reference')
+        setAudioIsPlaying(false)
+        setAudioProgress(emptyPlaybackProgress)
+      }
+    },
+    [controller, handlePlayerFailure],
   )
   const handlePlayerError = useCallback(
-    (error: YouTubePlayerError) => {
-      pendingComparisonPlayback.current = false
-      setPlayerError(error.message)
-      setPlayerIsReady(false)
-      controller.interrupt(error.message)
+    (error: YouTubePlayerError, generation: number) => {
+      handlePlayerFailure(generation, error.message)
     },
-    [controller],
+    [handlePlayerFailure],
   )
   const handlePlayerReady = useCallback(
-    (player: YouTubePlayerInstance | null) => {
-      playerRef.current = player
-      setPlayerIsReady(player !== null)
-      if (player !== null) {
-        setPlayerError(null)
-        updateReferenceProgress()
+    (player: YouTubePlayerInstance, generation: number) => {
+      const selection = selectedVideoRef.current
+      if (
+        generation !== loadGeneration.current ||
+        selection === null ||
+        selection.generation !== generation
+      ) {
+        try {
+          player.destroy()
+        } catch {
+          // A superseded player may already have removed its iframe.
+        }
+        return
       }
+
+      const binding = Object.freeze<RecorderPlayerBinding>({
+        expectedVideoId: selection.videoId,
+        getPlayerState: () => player.getPlayerState(),
+        getVideoUrl: () => player.getVideoUrl(),
+        loadGeneration: generation,
+      })
+      const validation = controller.bindPlayer(binding)
+      if (validation.status === 'invalid') {
+        handlePlayerFailure(generation, validation.message)
+        return
+      }
+      if (validation.status !== 'valid') {
+        return
+      }
+
+      playerBindingRef.current = binding
+      playerRef.current = player
+      setPlayerIsReady(true)
+      setPlayerPlaybackState(validation.playbackState)
+      setVideoLoadState({ status: 'ready', videoId: selection.videoId })
+      updateReferenceProgress()
     },
-    [updateReferenceProgress],
+    [controller, handlePlayerFailure, updateReferenceProgress],
   )
+
+  useEffect(() => {
+    const bindingError = snapshot.playerBindingError
+    if (
+      bindingError !== null &&
+      bindingError.loadGeneration === loadGeneration.current &&
+      selectedVideoRef.current?.generation === bindingError.loadGeneration
+    ) {
+      handlePlayerFailure(bindingError.loadGeneration, bindingError.message)
+    }
+  }, [handlePlayerFailure, snapshot.playerBindingError])
+
+  const submitVideoUrl = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const generation = ++loadGeneration.current
+    const parsedUrl = parseYouTubeVideoUrl(videoUrl)
+
+    try {
+      playerRef.current?.pauseVideo()
+    } catch {
+      // Player teardown below remains the fail-safe.
+    }
+    stopAudio(audioRef.current)
+    pendingComparisonPlayback.current = false
+    playerBindingRef.current = null
+    playerRef.current = null
+    selectedVideoRef.current = null
+    setSelectedVideo(null)
+    setActivePlayback('reference')
+    setAudioIsPlaying(false)
+    setAudioProgress(emptyPlaybackProgress)
+    setPlayerIsReady(false)
+    setPlayerPlaybackState('unstarted')
+    setReferenceProgress(emptyPlaybackProgress)
+
+    const shutdown = controller.shutdownForPlayerChange()
+    if (parsedUrl.status !== 'valid') {
+      setVideoLoadState({ status: 'error', message: parsedUrl.message })
+      return
+    }
+
+    setVideoLoadState({ status: 'loading', videoId: parsedUrl.videoId })
+    void shutdown.then(() => {
+      if (generation !== loadGeneration.current) {
+        return
+      }
+
+      const selection = { generation, videoId: parsedUrl.videoId }
+      selectedVideoRef.current = selection
+      setSelectedVideo(selection)
+    })
+  }
 
   const captureIsBusy = [
     'buffering',
@@ -462,7 +559,8 @@ function ConfiguredRecorderSpike({
     'finalising',
     'recording',
   ].includes(snapshot.state)
-  const canEnable = ['disabled', 'error'].includes(snapshot.state)
+  const canEnable =
+    playerIsReady && ['disabled', 'error'].includes(snapshot.state)
   const canDisable = !['disabled', 'error'].includes(snapshot.state)
   const practiceModeIsEnabled = canDisable
   const microphoneStatus =
@@ -479,8 +577,9 @@ function ConfiguredRecorderSpike({
         : snapshot.state === 'error'
           ? 'Try Practice Mode again'
           : 'Enable Practice Mode'
-  const practiceGateTitle =
-    snapshot.state === 'requestingMic'
+  const practiceGateTitle = !playerIsReady
+    ? 'Load a video before enabling Practice Mode'
+    : snapshot.state === 'requestingMic'
       ? 'Allow microphone access to continue'
       : practiceModeIsEnabled
         ? 'Practice Mode is ready'
@@ -488,12 +587,16 @@ function ConfiguredRecorderSpike({
   const practiceGateDescription = practiceModeIsEnabled
     ? 'Play the video to start recording. Wear headphones to keep the reference audio out of your microphone recording.'
     : 'Your microphone records only while the reference plays. Wear headphones to keep the reference audio out of your recording.'
-  const errorMessage = snapshot.errorMessage ?? playerError
+  const errorMessage = snapshot.errorMessage
   const visibleStatus = errorMessage ?? statusMessages[snapshot.state]
   const referenceIsPlaying = ['buffering', 'playing'].includes(
     playerPlaybackState,
   )
-  const recordingIsAvailable = snapshot.result !== null && !captureIsBusy
+  const latestRecordingIsAvailable = snapshot.result !== null && !captureIsBusy
+  const recordingIsAvailable =
+    latestRecordingIsAvailable &&
+    playerIsReady &&
+    snapshot.result?.videoId === selectedVideo?.videoId
   const comparisonStatus = audioIsPlaying
     ? 'Playing your recording'
     : referenceIsPlaying
@@ -502,9 +605,11 @@ function ConfiguredRecorderSpike({
         ? 'Finishing your recording…'
         : recordingIsAvailable
           ? 'Ready to compare'
-          : practiceModeIsEnabled
-            ? 'Record an attempt to compare'
-            : 'Enable Practice Mode to record and compare'
+          : latestRecordingIsAvailable
+            ? 'Latest recording belongs to another video'
+            : practiceModeIsEnabled
+              ? 'Record an attempt to compare'
+              : 'Enable Practice Mode to record and compare'
   const comparisonSessionIsUseful =
     practiceModeIsEnabled ||
     referenceIsPlaying ||
@@ -520,7 +625,6 @@ function ConfiguredRecorderSpike({
   const enablePracticeMode = () => {
     stopAudio(audioRef.current)
     setAudioIsPlaying(false)
-    setPlayerError(null)
     controller.enable()
   }
   const togglePracticeMode = () => {
@@ -531,10 +635,28 @@ function ConfiguredRecorderSpike({
 
     enablePracticeMode()
   }
+  const validatePlayerAction = useCallback(() => {
+    const binding = playerBindingRef.current
+    if (binding === null) {
+      return false
+    }
+
+    const validation = controller.validatePlaybackAction(binding)
+    if (validation.status === 'invalid') {
+      handlePlayerFailure(binding.loadGeneration, validation.message)
+      return false
+    }
+    return validation.status === 'valid'
+  }, [controller, handlePlayerFailure])
   const playLatestAttempt = () => {
     pendingComparisonPlayback.current = false
-    playerRef.current?.pauseVideo()
-    controller.playerStopped()
+    if (playerIsReady) {
+      if (!validatePlayerAction()) {
+        audioRef.current?.pause()
+        return
+      }
+      playerRef.current?.pauseVideo()
+    }
     setActivePlayback('recording')
     setAudioIsPlaying(true)
     updateAudioProgress()
@@ -545,7 +667,7 @@ function ConfiguredRecorderSpike({
   }
   const toggleReferencePlayback = () => {
     const player = playerRef.current
-    if (player === null) {
+    if (player === null || !validatePlayerAction()) {
       return
     }
 
@@ -562,7 +684,7 @@ function ConfiguredRecorderSpike({
   }
   const toggleRecordingPlayback = () => {
     const audio = audioRef.current
-    if (audio === null) {
+    if (audio === null || !recordingIsAvailable || !validatePlayerAction()) {
       return
     }
 
@@ -574,7 +696,6 @@ function ConfiguredRecorderSpike({
     }
 
     playerRef.current?.pauseVideo()
-    controller.playerStopped()
     void audio.play().catch(() => {
       setAudioIsPlaying(false)
     })
@@ -583,12 +704,11 @@ function ConfiguredRecorderSpike({
     pendingComparisonPlayback.current = false
     if (activePlayback === 'recording') {
       const audio = audioRef.current
-      if (audio === null) {
+      if (audio === null || !recordingIsAvailable || !validatePlayerAction()) {
         return
       }
 
       playerRef.current?.pauseVideo()
-      controller.playerStopped()
       audio.currentTime = 0
       updateAudioProgress()
       void audio.play().catch(() => {
@@ -598,7 +718,7 @@ function ConfiguredRecorderSpike({
     }
 
     const player = playerRef.current
-    if (player === null) {
+    if (player === null || !validatePlayerAction()) {
       return
     }
 
@@ -640,7 +760,7 @@ function ConfiguredRecorderSpike({
       }
 
       const player = playerRef.current
-      if (player === null) {
+      if (player === null || !validatePlayerAction()) {
         return
       }
 
@@ -677,17 +797,22 @@ function ConfiguredRecorderSpike({
     return () => {
       document.removeEventListener('keydown', handleComparisonShortcut)
     }
-  }, [recordingIsAvailable, referenceIsPlaying, snapshot.state])
+  }, [
+    recordingIsAvailable,
+    referenceIsPlaying,
+    snapshot.state,
+    validatePlayerAction,
+  ])
 
   return (
     <main id="main-content" className={styles.main}>
       <section className={styles.introduction} aria-labelledby="spike-title">
-        <p className={styles.kicker}>Stage 3 · Player-connected recorder</p>
+        <p className={styles.kicker}>Stage 2 · URL-first practice loader</p>
         <h1 id="spike-title">Listen. Shadow. Play it back.</h1>
         <p>
-          Enable Practice Mode, then use the video&apos;s native controls.
-          Playing starts microphone recording; pausing or ending the video
-          finishes the attempt.
+          Load a supported YouTube URL, enable Practice Mode, then use the
+          video&apos;s native controls. Playing starts microphone recording;
+          pausing or ending the video finishes the attempt.
         </p>
       </section>
 
@@ -697,8 +822,59 @@ function ConfiguredRecorderSpike({
             <p className={styles.step}>Practice video</p>
             <h2 id="video-title">Control the recording from the video</h2>
           </div>
-          <span className={styles.fixedBadge}>Fixed test video</span>
+          <span className={styles.videoBadge}>
+            {selectedVideo === null
+              ? 'No active video'
+              : `Video ${selectedVideo.videoId}`}
+          </span>
         </div>
+        <form className={styles.videoLoader} onSubmit={submitVideoUrl}>
+          <label htmlFor="youtube-video-url">YouTube video URL</label>
+          <div className={styles.videoLoaderControls}>
+            <input
+              aria-describedby="youtube-video-help"
+              autoComplete="url"
+              id="youtube-video-url"
+              inputMode="url"
+              onChange={(event) => setVideoUrl(event.currentTarget.value)}
+              placeholder="https://www.youtube.com/watch?v=…"
+              spellCheck="false"
+              type="text"
+              value={videoUrl}
+            />
+            <button type="submit">Load video</button>
+          </div>
+          <p id="youtube-video-help">
+            Supports YouTube watch, youtu.be, Shorts, and embed HTTPS URLs.
+          </p>
+        </form>
+        <p
+          aria-live={videoLoadState.status === 'error' ? 'assertive' : 'polite'}
+          className={styles.videoLoadStatus}
+          role={videoLoadState.status === 'error' ? 'alert' : 'status'}
+        >
+          {videoLoadState.status === 'empty' ? (
+            <>
+              <strong>No video</strong>
+              <span>Paste a supported URL to begin.</span>
+            </>
+          ) : videoLoadState.status === 'loading' ? (
+            <>
+              <strong>Loading video</strong>
+              <span>Verifying {videoLoadState.videoId}…</span>
+            </>
+          ) : videoLoadState.status === 'ready' ? (
+            <>
+              <strong>Video ready</strong>
+              <span>Verified source ID {videoLoadState.videoId}.</span>
+            </>
+          ) : (
+            <>
+              <strong>Video error</strong>
+              <span>{videoLoadState.message}</span>
+            </>
+          )}
+        </p>
         <div
           className={styles.practiceGate}
           data-active={practiceModeIsEnabled ? 'true' : 'false'}
@@ -721,6 +897,7 @@ function ConfiguredRecorderSpike({
             aria-pressed={practiceModeIsEnabled}
             className={styles.practiceControl}
             data-active={practiceModeIsEnabled ? 'true' : 'false'}
+            disabled={!playerIsReady && !practiceModeIsEnabled}
             onClick={togglePracticeMode}
             type="button"
           >
@@ -733,14 +910,23 @@ function ConfiguredRecorderSpike({
             </span>
           </button>
         </div>
-        <FixedVideoPlayer
-          onError={handlePlayerError}
-          onPlaybackStateChange={handlePlaybackStateChange}
-          onPlayerReady={handlePlayerReady}
-          origin={origin}
-          playerApi={playerApi}
-          videoId={videoId}
-        />
+        {selectedVideo === null ? (
+          <div className={styles.videoPlaceholder}>
+            <span aria-hidden="true">▶</span>
+            <p>The player will appear after a video URL is validated.</p>
+          </div>
+        ) : (
+          <YouTubeVideoPlayer
+            key={selectedVideo.generation}
+            loadGeneration={selectedVideo.generation}
+            onError={handlePlayerError}
+            onPlaybackStateChange={handlePlaybackStateChange}
+            onPlayerReady={handlePlayerReady}
+            origin={origin}
+            playerApi={playerApi}
+            videoId={selectedVideo.videoId}
+          />
+        )}
         <section
           aria-hidden={showCompactDock ? true : undefined}
           aria-keyshortcuts="Alt+C"
@@ -862,6 +1048,7 @@ function ConfiguredRecorderSpike({
                 src={snapshot.result.objectUrl}
               />
               <p>
+                Source video ID: <strong>{snapshot.result.videoId}</strong>.
                 This session-only audio stays in your browser. The next
                 completed attempt replaces it.
               </p>

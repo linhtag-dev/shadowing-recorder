@@ -1,4 +1,4 @@
-export function createFixedVideoEmbedUrl(videoId: string, origin: string) {
+export function createYouTubeEmbedUrl(videoId: string, origin: string) {
   const url = new URL(
     `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}`,
   )
