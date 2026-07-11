@@ -1,8 +1,8 @@
 # Shadowing Recorder
 
-Shadowing Recorder is a browser-first language practice tool. The current Stage 1 build is a non-public browser proof of concept: it embeds one developer-prechecked video, records microphone audio through explicit controls, and plays back only the latest recording locally.
+Shadowing Recorder is a browser-first language practice tool. The current non-public browser build embeds one developer-prechecked video, connects its native play/pause state to microphone recording, and plays back only the latest recording locally.
 
-This stage intentionally has no arbitrary URL input, eligibility request, YouTube Data API credential, consent flow, automatic player-driven recording, or learner-audio server route.
+This build intentionally has no arbitrary URL input, eligibility request, YouTube Data API credential, consent flow, or learner-audio server route.
 
 ## Runtime requirements
 
@@ -33,7 +33,9 @@ VITE_SHADOWING_VIDEO_ID="$VITE_SHADOWING_VIDEO_ID" npm run dev
 
 Open <http://127.0.0.1:5173>. Vite serves the web application and proxies same-origin `/api/*` requests to Hono at `http://127.0.0.1:3000`. Microphone access works through the browser's localhost secure-context exception.
 
-The page uses `youtube-nocookie.com`, native player controls, no autoplay, inline playback, and the current application origin. It does not load the YouTube IFrame Player API in Stage 1.
+The page uses `youtube-nocookie.com`, native player controls, no autoplay, inline playback, and the current application origin. It enables and loads the YouTube IFrame Player API so `PLAYING` starts microphone recording, `BUFFERING` pauses it, and `PAUSED` or `ENDED` finalises it while Practice Mode is enabled.
+
+Because headphones are required, microphone capture explicitly requests echo cancellation, noise suppression, and automatic gain control off. Recorder diagnostics show the processing settings, sample rate, and channel count that the browser actually reports; a browser may decline or omit an optional setting.
 
 ## Production preview
 
@@ -67,11 +69,11 @@ npm run test:e2e
 
 `npm run check` runs formatting checks, linting, strict TypeScript checks, Vitest projects, and production builds. A normal production build has no fixed ID unless the operator supplies one and therefore validates the disabled state.
 
-`npm run test:e2e` builds with the clearly synthetic `stage1_test` fixture, intercepts the iframe request, injects microphone and MediaRecorder fakes, and runs the full explicit start/pause/resume/stop/playback flow in Chromium, Firefox, and WebKit. CI never contacts live YouTube or requests a real microphone.
+`npm run test:e2e` builds with the clearly synthetic `stage1_test` fixture, intercepts the iframe request, injects YouTube-player, microphone, and MediaRecorder fakes, and verifies the player-driven play/buffer/resume/pause/playback flow in Chromium, Firefox, and WebKit. CI never contacts live YouTube or requests a real microphone.
 
 ## Real-browser verification
 
-Automated media fakes do not establish real codec, permission, backgrounding, or device behavior. Before Stage 1 can be marked complete, follow the manual runbook and record every required desktop and physical-mobile result in [the Stage 1 browser matrix](docs/maintainers/stage-1-browser-matrix.md).
+Automated media fakes do not establish real codec, permission, backgrounding, or device behavior. Stage 1's production-container, current-stable desktop, and physical-mobile real-media matrix was completed on 2026-07-11; the results and operator-evidence boundary are recorded in [the Stage 1 browser matrix](docs/maintainers/stage-1-browser-matrix.md).
 
 At minimum, each real-browser run must cover permission grant and denial, simultaneous visible video playback and microphone recording, pause/resume/stop ordering, reported MIME type and byte count, output playback, page backgrounding, and confirmed microphone shutdown.
 

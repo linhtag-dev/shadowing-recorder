@@ -1,28 +1,39 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-
-import type { VideoConfiguration } from '../videoConfiguration.js'
 import {
-  createBrowserRecorderDependencies,
-  type RecorderDependencies,
-} from '../controller/browserCapabilities.js'
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+
+import type { RecorderDependencies } from '../controller/browserCapabilities.js'
+import { createBrowserRecorderDependencies } from '../controller/browserCapabilities.js'
 import { RecorderController } from '../controller/RecorderController.js'
 import type { RecorderState } from '../controller/recorderMachine.js'
+import type {
+  YouTubePlaybackState,
+  YouTubePlayerApi,
+  YouTubePlayerError,
+  YouTubePlayerInstance,
+} from '../player/youTubePlayer.js'
+import type { VideoConfiguration } from '../videoConfiguration.js'
 import { FixedVideoPlayer } from './FixedVideoPlayer.js'
 import styles from './RecorderSpike.module.css'
 
 export interface RecorderSpikeProps {
   dependencies?: RecorderDependencies | undefined
   origin?: string | undefined
+  playerApi?: YouTubePlayerApi | undefined
   videoConfiguration: VideoConfiguration
 }
 
 const statusMessages: Record<RecorderState, string> = {
-  error: 'Recording stopped with an error.',
+  armed: 'Ready. Play the video to start recording.',
+  buffering: 'Video buffering; microphone recording paused.',
+  disabled: 'Practice Mode is off.',
+  error: 'Practice Mode stopped with an error.',
   finalising: 'Finishing your recording…',
-  idle: 'Ready to record.',
-  paused: 'Recording paused.',
-  ready: 'Your latest recording is ready to play.',
-  recording: 'Recording your microphone.',
+  recording: 'Recording your microphone while the video plays.',
   requestingMic: 'Waiting for microphone permission…',
 }
 
@@ -39,9 +50,30 @@ function formatBytes(byteCount: number) {
   return new Intl.NumberFormat('en-US').format(byteCount)
 }
 
+function formatBooleanSetting(value: boolean | string | null) {
+  if (value === null) {
+    return 'Not reported'
+  }
+
+  if (typeof value === 'string') {
+    return `On (${value})`
+  }
+
+  return value ? 'On' : 'Off'
+}
+
+function formatNumericSetting(value: number | null, unit = '') {
+  if (value === null) {
+    return 'Not reported'
+  }
+
+  return `${new Intl.NumberFormat('en-US').format(value)}${unit}`
+}
+
 export function RecorderSpike({
   dependencies,
   origin,
+  playerApi,
   videoConfiguration,
 }: RecorderSpikeProps) {
   if (videoConfiguration.status !== 'configured') {
@@ -62,6 +94,7 @@ export function RecorderSpike({
     <ConfiguredRecorderSpike
       dependencies={dependencies}
       origin={origin}
+      playerApi={playerApi}
       videoId={videoConfiguration.videoId}
     />
   )
@@ -70,16 +103,20 @@ export function RecorderSpike({
 interface ConfiguredRecorderSpikeProps {
   dependencies?: RecorderDependencies | undefined
   origin?: string | undefined
+  playerApi?: YouTubePlayerApi | undefined
   videoId: string
 }
 
 function ConfiguredRecorderSpike({
   dependencies,
   origin,
+  playerApi,
   videoId,
 }: ConfiguredRecorderSpikeProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const lifecycle = useRef({ generation: 0 })
+  const playerRef = useRef<YouTubePlayerInstance | null>(null)
+  const [playerError, setPlayerError] = useState<string | null>(null)
   const [controller] = useState(
     () =>
       new RecorderController(
@@ -96,14 +133,16 @@ function ConfiguredRecorderSpike({
     const generation = ++lifecycleState.generation
     const interruptForHiddenPage = () => {
       if (document.visibilityState === 'hidden') {
+        playerRef.current?.pauseVideo()
         controller.interrupt(
-          'Recording stopped because the page was hidden. Return to this page and try again.',
+          'Practice Mode stopped because the page was hidden. Return to this page and try again.',
         )
       }
     }
     const interruptForExit = () => {
+      playerRef.current?.pauseVideo()
       controller.interrupt(
-        'Recording stopped because the page was exited. Return to this page and try again.',
+        'Practice Mode stopped because the page was exited. Return to this page and try again.',
       )
       controller.discardCompletedRecording()
     }
@@ -127,48 +166,106 @@ function ConfiguredRecorderSpike({
     }
   }, [controller])
 
-  const isBusy = [
+  const handlePlaybackStateChange = useCallback(
+    (state: YouTubePlaybackState) => {
+      setPlayerError(null)
+
+      switch (state) {
+        case 'playing':
+          stopAudio(audioRef.current)
+          controller.playerPlaying()
+          break
+        case 'buffering':
+          controller.playerBuffering()
+          break
+        case 'cued':
+        case 'ended':
+        case 'paused':
+        case 'unstarted':
+          controller.playerStopped()
+          break
+      }
+    },
+    [controller],
+  )
+  const handlePlayerError = useCallback(
+    (error: YouTubePlayerError) => {
+      setPlayerError(error.message)
+      controller.interrupt(error.message)
+    },
+    [controller],
+  )
+  const handlePlayerReady = useCallback(
+    (player: YouTubePlayerInstance | null) => {
+      playerRef.current = player
+      if (player !== null) {
+        setPlayerError(null)
+      }
+    },
+    [],
+  )
+
+  const captureIsBusy = [
+    'buffering',
     'finalising',
-    'paused',
     'recording',
     'requestingMic',
   ].includes(snapshot.state)
+  const microphoneIsActive = [
+    'armed',
+    'buffering',
+    'finalising',
+    'recording',
+  ].includes(snapshot.state)
+  const canEnable = ['disabled', 'error'].includes(snapshot.state)
+  const canDisable = !['disabled', 'error'].includes(snapshot.state)
   const microphoneStatus =
     snapshot.state === 'requestingMic'
       ? 'Waiting for permission'
-      : ['finalising', 'paused', 'recording'].includes(snapshot.state)
+      : microphoneIsActive
         ? 'Microphone active'
         : 'Microphone off'
-  const visibleStatus =
-    snapshot.state === 'error' && snapshot.errorMessage !== null
-      ? snapshot.errorMessage
-      : statusMessages[snapshot.state]
+  const errorMessage = snapshot.errorMessage ?? playerError
+  const visibleStatus = errorMessage ?? statusMessages[snapshot.state]
 
-  const startRecording = () => {
+  const enablePracticeMode = () => {
     stopAudio(audioRef.current)
-    controller.start()
+    setPlayerError(null)
+    controller.enable()
+  }
+  const playLatestAttempt = () => {
+    playerRef.current?.pauseVideo()
+    controller.playerStopped()
   }
 
   return (
     <main id="main-content" className={styles.main}>
       <section className={styles.introduction} aria-labelledby="spike-title">
-        <p className={styles.kicker}>Stage 1 · Non-public browser spike</p>
+        <p className={styles.kicker}>Stage 3 · Player-connected recorder</p>
         <h1 id="spike-title">Listen. Shadow. Play it back.</h1>
         <p>
-          Play the fixed, developer-prechecked video with its native controls,
-          then record your microphone with the explicit controls below.
+          Enable Practice Mode, then use the video&apos;s native controls.
+          Playing starts microphone recording; pausing or ending the video
+          finishes the attempt.
         </p>
       </section>
 
       <section className={styles.playerPanel} aria-labelledby="video-title">
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.step}>Step 1</p>
-            <h2 id="video-title">Play the practice video</h2>
+            <p className={styles.step}>Practice video</p>
+            <h2 id="video-title">Control the recording from the video</h2>
           </div>
           <span className={styles.fixedBadge}>Fixed test video</span>
         </div>
-        <FixedVideoPlayer videoId={videoId} origin={origin} />
+        <FixedVideoPlayer
+          onError={handlePlayerError}
+          onPlaybackStateChange={handlePlaybackStateChange}
+          onPlayerReady={handlePlayerReady}
+          origin={origin}
+          playerApi={playerApi}
+          videoId={videoId}
+        />
         <p className={styles.headphones}>
           <span aria-hidden="true">🎧</span>
           <span>
@@ -185,16 +282,12 @@ function ConfiguredRecorderSpike({
         >
           <div className={styles.sectionHeading}>
             <div>
-              <p className={styles.step}>Step 2</p>
-              <h2 id="recorder-title">Record your shadowing</h2>
+              <p className={styles.step}>Practice Mode</p>
+              <h2 id="recorder-title">Connect the microphone</h2>
             </div>
             <span
               className={styles.microphoneStatus}
-              data-active={
-                ['finalising', 'paused', 'recording'].includes(snapshot.state)
-                  ? 'true'
-                  : 'false'
-              }
+              data-active={microphoneIsActive ? 'true' : 'false'}
             >
               <span aria-hidden="true" />
               {microphoneStatus}
@@ -203,59 +296,43 @@ function ConfiguredRecorderSpike({
 
           <p
             className={styles.liveStatus}
-            role={snapshot.state === 'error' ? 'alert' : 'status'}
-            aria-live={snapshot.state === 'error' ? 'assertive' : 'polite'}
+            role={errorMessage === null ? 'status' : 'alert'}
+            aria-live={errorMessage === null ? 'polite' : 'assertive'}
           >
             {visibleStatus}
           </p>
 
-          <div
-            className={styles.controls}
-            aria-label="Microphone recording controls"
-          >
+          <div className={styles.controls} aria-label="Practice Mode controls">
             <button
               className={styles.primaryButton}
-              disabled={isBusy}
-              onClick={startRecording}
+              disabled={!canEnable}
+              onClick={enablePracticeMode}
               type="button"
             >
-              Start recording
+              Enable Practice Mode
             </button>
             <button
-              disabled={snapshot.state !== 'recording'}
-              onClick={() => controller.pause()}
+              disabled={!canDisable}
+              onClick={() => controller.disable()}
               type="button"
             >
-              Pause
-            </button>
-            <button
-              disabled={snapshot.state !== 'paused'}
-              onClick={() => controller.resume()}
-              type="button"
-            >
-              Resume
-            </button>
-            <button
-              disabled={!['paused', 'recording'].includes(snapshot.state)}
-              onClick={() => controller.stop()}
-              type="button"
-            >
-              Stop
+              Disable Practice Mode
             </button>
           </div>
 
-          {snapshot.result !== null && !isBusy ? (
+          {snapshot.result !== null && !captureIsBusy ? (
             <div className={styles.playback}>
               <p className={styles.step}>Latest recording</p>
               <audio
                 aria-label="Latest recording playback"
                 controls
+                onPlay={playLatestAttempt}
                 ref={audioRef}
                 src={snapshot.result.objectUrl}
               />
               <p>
-                This session-only audio stays in your browser. Starting another
-                recording replaces it after the new recording finishes.
+                This session-only audio stays in your browser. The next
+                completed attempt replaces it.
               </p>
             </div>
           ) : null}
@@ -265,8 +342,8 @@ function ConfiguredRecorderSpike({
           className={styles.diagnostics}
           aria-labelledby="diagnostics-title"
         >
-          <p className={styles.step}>Spike diagnostics</p>
-          <h2 id="diagnostics-title">Recorder output</h2>
+          <p className={styles.step}>Recorder diagnostics</p>
+          <h2 id="diagnostics-title">Latest attempt</h2>
           <dl>
             <div>
               <dt>State</dt>
@@ -279,6 +356,47 @@ function ConfiguredRecorderSpike({
             <div>
               <dt>Audio bytes</dt>
               <dd>{formatBytes(snapshot.recordedByteCount)}</dd>
+            </div>
+            <div>
+              <dt>Echo cancellation</dt>
+              <dd>
+                {formatBooleanSetting(
+                  snapshot.microphoneSettings?.echoCancellation ?? null,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Noise suppression</dt>
+              <dd>
+                {formatBooleanSetting(
+                  snapshot.microphoneSettings?.noiseSuppression ?? null,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Auto gain</dt>
+              <dd>
+                {formatBooleanSetting(
+                  snapshot.microphoneSettings?.autoGainControl ?? null,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Sample rate</dt>
+              <dd>
+                {formatNumericSetting(
+                  snapshot.microphoneSettings?.sampleRate ?? null,
+                  ' Hz',
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Channels</dt>
+              <dd>
+                {formatNumericSetting(
+                  snapshot.microphoneSettings?.channelCount ?? null,
+                )}
+              </dd>
             </div>
           </dl>
           <h3>Recorder event order</h3>

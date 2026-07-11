@@ -1,7 +1,7 @@
 # Shadowing Recorder Technical Design
 
 Status: Draft  
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Related documents
 
@@ -230,7 +230,7 @@ The player remains visible and interactive. The application must not cover or in
 
 Use:
 
-- `navigator.mediaDevices.getUserMedia({ audio: true })` for microphone access.
+- `navigator.mediaDevices.getUserMedia()` with echo cancellation, noise suppression, and automatic gain control explicitly requested off for microphone access.
 - An attempt-scoped `MediaRecorder` started with an approximately one-second `timeslice` to produce bounded chunks.
 - `dataavailable` to append non-empty chunks to that attempt draft and update byte accounting.
 - A `Blob` assembled only after the final `dataavailable` has been followed by the recorder's `stop` event.
@@ -241,21 +241,21 @@ Microphone access requires a secure browser context, normally HTTPS or localhost
 
 Do not hard-code one output MIME type. Use `MediaRecorder.isTypeSupported()` to select a supported format or allow the browser to choose its default. Chrome, Firefox, and Safari may produce different containers and codecs.
 
-### Suggested microphone constraints
+### Microphone constraints
 
-Start with browser defaults. The application may request the following when supported:
+Headphones are a prerequisite, so the application requests capture without voice-call processing:
 
 ```js
 {
   audio: {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false
   }
 }
 ```
 
-These options improve ordinary playback but should not be treated as guarantees. Headphones remain the primary protection against reference-audio leakage.
+This avoids Chrome echo-cancellation artifacts observed when the learner speaks while audible reference speech is playing; the same capture was clean when Chrome playback was muted and in Safari on the same Mac. Browsers may ignore optional constraints, so read the accepted audio track's `getSettings()` values and expose the non-identifying processing, sample-rate, and channel settings in diagnostics. Do not expose device or group identifiers. Headphones remain the primary protection against reference-audio leakage; without them, unprocessed capture may include the YouTube audio.
 
 ## Event flow
 

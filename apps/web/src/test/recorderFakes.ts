@@ -3,6 +3,7 @@ import type {
   MicrophoneProvider,
   MicrophoneStream,
   MicrophoneTrack,
+  MicrophoneTrackSettings,
   ObjectUrlProvider,
   RecorderAdapter,
   RecorderDependencies,
@@ -43,6 +44,18 @@ export class FakeTrack implements MicrophoneTrack {
   stopCalls = 0
   throwOnStop = false
 
+  constructor(
+    readonly settings: MicrophoneTrackSettings = {
+      autoGainControl: false,
+      channelCount: 1,
+      echoCancellation: false,
+      latency: 0.01,
+      noiseSuppression: false,
+      sampleRate: 48_000,
+      sampleSize: 16,
+    },
+  ) {}
+
   readonly addEventListener = (_type: 'ended', listener: EventListener) => {
     this.endedListeners.add(listener)
   }
@@ -50,6 +63,8 @@ export class FakeTrack implements MicrophoneTrack {
   readonly removeEventListener = (_type: 'ended', listener: EventListener) => {
     this.endedListeners.delete(listener)
   }
+
+  readonly getSettings = () => this.settings
 
   stop() {
     ++this.stopCalls

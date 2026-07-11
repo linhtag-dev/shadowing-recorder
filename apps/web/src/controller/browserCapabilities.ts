@@ -6,8 +6,29 @@ export interface RecorderEvent {
   error?: unknown
 }
 
+export interface AppliedMicrophoneSettings {
+  autoGainControl: boolean | null
+  channelCount: number | null
+  echoCancellation: boolean | string | null
+  latency: number | null
+  noiseSuppression: boolean | null
+  sampleRate: number | null
+  sampleSize: number | null
+}
+
+export interface MicrophoneTrackSettings {
+  autoGainControl?: boolean | undefined
+  channelCount?: number | undefined
+  echoCancellation?: boolean | string | undefined
+  latency?: number | undefined
+  noiseSuppression?: boolean | undefined
+  sampleRate?: number | undefined
+  sampleSize?: number | undefined
+}
+
 export interface MicrophoneTrack {
   addEventListener?: (type: 'ended', listener: EventListener) => void
+  getSettings?: () => MicrophoneTrackSettings
   removeEventListener?: (type: 'ended', listener: EventListener) => void
   stop: () => void
 }
@@ -57,6 +78,12 @@ export interface RecorderDependencies {
   recorders: RecorderFactory
 }
 
+export const unprocessedMicrophoneConstraints = {
+  autoGainControl: false,
+  echoCancellation: false,
+  noiseSuppression: false,
+} as const satisfies MediaTrackConstraints
+
 export const recorderMimeTypeCandidates = [
   'audio/webm;codecs=opus',
   'audio/ogg;codecs=opus',
@@ -77,6 +104,30 @@ export function selectRecorderMimeType(
   }
 
   return undefined
+}
+
+export function readAppliedMicrophoneSettings(
+  stream: MicrophoneStream,
+): AppliedMicrophoneSettings | null {
+  const track = stream.getTracks()[0]
+  if (track?.getSettings === undefined) {
+    return null
+  }
+
+  try {
+    const settings = track.getSettings()
+    return {
+      autoGainControl: settings.autoGainControl ?? null,
+      channelCount: settings.channelCount ?? null,
+      echoCancellation: settings.echoCancellation ?? null,
+      latency: settings.latency ?? null,
+      noiseSuppression: settings.noiseSuppression ?? null,
+      sampleRate: settings.sampleRate ?? null,
+      sampleSize: settings.sampleSize ?? null,
+    }
+  } catch {
+    return null
+  }
 }
 
 class NativeRecorderAdapter implements RecorderAdapter {
@@ -150,7 +201,10 @@ export function createBrowserRecorderDependencies(): RecorderDependencies {
     microphone: {
       isAvailable: () =>
         typeof navigator.mediaDevices?.getUserMedia === 'function',
-      request: () => navigator.mediaDevices.getUserMedia({ audio: true }),
+      request: () =>
+        navigator.mediaDevices.getUserMedia({
+          audio: unprocessedMicrophoneConstraints,
+        }),
     },
     objectUrls: {
       create: (blob) => URL.createObjectURL(blob),

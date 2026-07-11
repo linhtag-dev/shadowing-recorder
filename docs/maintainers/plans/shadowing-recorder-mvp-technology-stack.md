@@ -28,7 +28,7 @@ The scaffolding task should produce a tested walking skeleton rather than only g
 
 The walking-skeleton scaffold was implemented and locally verified on 2026-07-11. The repository now contains the npm workspaces, shared runtime contracts, accessible application shell, same-origin health route and development proxy, static quality and test configuration, production Node.js server, and multi-stage Docker image described below.
 
-Local verification covers a clean lockfile install, the root `npm run check` workflow, the built-service Playwright smoke test in Chromium, Firefox, and WebKit, the development `/api/*` proxy, and a healthy locally running production container with no credential. The GitHub Actions workflow mirrors these commands; its first hosted run remains to be confirmed after the scaffold is pushed. Step 2, including all YouTube and microphone behavior, has not started.
+Local verification covers a clean lockfile install, the root `npm run check` workflow, the built-service Playwright smoke test in Chromium, Firefox, and WebKit, the development `/api/*` proxy, and a healthy locally running production container with no credential. The GitHub Actions workflow mirrors these commands; its first hosted run remains to be confirmed. Step 2 was completed on 2026-07-11, including the fixed-video implementation, synthetic automation, real production-container media test, and required desktop and physical-device matrix.
 
 ## Proposed stack
 

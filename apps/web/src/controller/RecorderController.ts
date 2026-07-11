@@ -1,16 +1,22 @@
 import { createActor } from 'xstate'
 
 import type {
+  AppliedMicrophoneSettings,
   MicrophoneStream,
   RecorderAdapter,
   RecorderDependencies,
   RecorderEventType,
 } from './browserCapabilities.js'
-import { selectRecorderMimeType } from './browserCapabilities.js'
+import {
+  readAppliedMicrophoneSettings,
+  selectRecorderMimeType,
+} from './browserCapabilities.js'
 import { recorderMachine, type RecorderState } from './recorderMachine.js'
 
 const finalisationWatchdogMilliseconds = 5_000
 const recordingTimesliceMilliseconds = 1_000
+
+type PlayerPlaybackState = 'buffering' | 'playing' | 'stopped'
 
 export interface CompletedRecording {
   byteLength: number
@@ -21,6 +27,7 @@ export interface CompletedRecording {
 export interface RecorderControllerSnapshot {
   errorMessage: string | null
   eventOrder: readonly string[]
+  microphoneSettings: AppliedMicrophoneSettings | null
   recordedByteCount: number
   recorderMimeType: string | null
   result: CompletedRecording | null
@@ -83,16 +90,20 @@ export class RecorderController {
   readonly #listeners = new Set<() => void>()
   #activeAttempt: ActiveAttempt | null = null
   #cleanupTrackListeners: Array<() => void> = []
+  #disableAfterFinalisation = false
   #disposed = false
   #generation = 0
   #intentionalTrackShutdown = false
+  #playerState: PlayerPlaybackState = 'stopped'
+  #practiceEnabled = false
   #snapshot: RecorderControllerSnapshot = {
     errorMessage: null,
     eventOrder: [],
+    microphoneSettings: null,
     recordedByteCount: 0,
     recorderMimeType: null,
     result: null,
-    state: 'idle',
+    state: 'disabled',
   }
   #stream: MicrophoneStream | null = null
 
@@ -114,23 +125,19 @@ export class RecorderController {
     }
   }
 
-  start() {
+  enable() {
     if (
       this.#disposed ||
-      !['error', 'idle', 'ready'].includes(this.#snapshot.state)
+      !['disabled', 'error'].includes(this.#snapshot.state)
     ) {
       return
     }
 
     const generation = ++this.#generation
-
-    this.#publish({
-      errorMessage: null,
-      eventOrder: [],
-      recordedByteCount: 0,
-      recorderMimeType: null,
-    })
-    this.#actor.send({ type: 'START' })
+    this.#practiceEnabled = true
+    this.#disableAfterFinalisation = false
+    this.#publish({ errorMessage: null, microphoneSettings: null })
+    this.#actor.send({ type: 'ENABLE' })
 
     if (!this.#dependencies.microphone.isAvailable()) {
       this.#fail(
@@ -149,88 +156,93 @@ export class RecorderController {
     void this.#requestMicrophone(generation)
   }
 
-  pause() {
-    const attempt = this.#activeAttempt
-
-    if (
-      this.#disposed ||
-      this.#snapshot.state !== 'recording' ||
-      attempt === null
-    ) {
+  disable() {
+    if (this.#disposed || this.#snapshot.state === 'disabled') {
       return
     }
 
-    try {
-      attempt.recorder.pause()
-      if (this.#isCurrentAttempt(attempt)) {
-        this.#actor.send({ type: 'PAUSE' })
-      }
-    } catch (error) {
-      this.#fail(describeRecorderError(error))
+    this.#practiceEnabled = false
+
+    if (
+      this.#snapshot.state === 'recording' ||
+      this.#snapshot.state === 'buffering'
+    ) {
+      this.#disableAfterFinalisation = true
+      this.#requestFinalisation()
+      return
+    }
+
+    if (this.#snapshot.state === 'finalising') {
+      this.#disableAfterFinalisation = true
+      return
+    }
+
+    ++this.#generation
+    this.#disableAfterFinalisation = false
+    this.#intentionalTrackShutdown = true
+    this.#stopCurrentStream()
+    this.#publish({ errorMessage: null })
+    this.#actor.send({ type: 'DISABLE' })
+  }
+
+  playerPlaying() {
+    if (this.#disposed) {
+      return
+    }
+
+    this.#playerState = 'playing'
+
+    if (!this.#practiceEnabled) {
+      return
+    }
+
+    if (this.#snapshot.state === 'armed') {
+      this.#startAttempt()
+      return
+    }
+
+    if (this.#snapshot.state === 'buffering') {
+      this.#resumeAttempt()
     }
   }
 
-  resume() {
-    const attempt = this.#activeAttempt
-
-    if (
-      this.#disposed ||
-      this.#snapshot.state !== 'paused' ||
-      attempt === null
-    ) {
+  playerBuffering() {
+    if (this.#disposed) {
       return
     }
 
-    try {
-      attempt.recorder.resume()
-      if (this.#isCurrentAttempt(attempt)) {
-        this.#actor.send({ type: 'RESUME' })
-      }
-    } catch (error) {
-      this.#fail(describeRecorderError(error))
+    this.#playerState = 'buffering'
+
+    if (this.#practiceEnabled && this.#snapshot.state === 'recording') {
+      this.#pauseAttempt()
     }
   }
 
-  stop() {
-    const attempt = this.#activeAttempt
-
-    if (
-      this.#disposed ||
-      !['paused', 'recording'].includes(this.#snapshot.state) ||
-      attempt === null ||
-      attempt.finalisationRequested
-    ) {
+  playerStopped() {
+    if (this.#disposed) {
       return
     }
 
-    attempt.finalisationRequested = true
-    this.#actor.send({ type: 'STOP' })
-    attempt.watchdogActive = true
-    attempt.watchdogHandle = this.#dependencies.clock.setTimeout(() => {
-      if (
-        this.#isCurrentAttempt(attempt) &&
-        attempt.watchdogActive &&
-        this.#snapshot.state === 'finalising'
-      ) {
-        this.#fail(
-          'Recording did not finish within five seconds. The microphone has been stopped; try again.',
-        )
-      }
-    }, finalisationWatchdogMilliseconds)
+    this.#playerState = 'stopped'
 
-    try {
-      attempt.recorder.stop()
-    } catch (error) {
-      this.#fail(describeRecorderError(error))
+    if (
+      this.#practiceEnabled &&
+      ['buffering', 'recording'].includes(this.#snapshot.state)
+    ) {
+      this.#requestFinalisation()
     }
   }
 
   interrupt(message: string) {
     if (
       this.#disposed ||
-      !['finalising', 'paused', 'recording', 'requestingMic'].includes(
-        this.#snapshot.state,
-      )
+      ![
+        'armed',
+        'buffering',
+        'finalising',
+        'recording',
+        'requestingMic',
+      ].includes(this.#snapshot.state)
     ) {
       return
     }
@@ -255,6 +267,7 @@ export class RecorderController {
     }
 
     this.#disposed = true
+    this.#practiceEnabled = false
     ++this.#generation
     this.#intentionalTrackShutdown = true
     this.#releaseActiveAttempt(true)
@@ -282,6 +295,7 @@ export class RecorderController {
 
     if (
       this.#disposed ||
+      !this.#practiceEnabled ||
       generation !== this.#generation ||
       this.#snapshot.state !== 'requestingMic'
     ) {
@@ -292,12 +306,31 @@ export class RecorderController {
     this.#stream = stream
     this.#intentionalTrackShutdown = false
     this.#watchTracks(stream, generation)
+    this.#publish({
+      microphoneSettings: readAppliedMicrophoneSettings(stream),
+    })
+    this.#actor.send({ type: 'MICROPHONE_GRANTED' })
 
     if (
-      generation !== this.#generation ||
-      this.#snapshot.state !== 'requestingMic'
+      this.#practiceEnabled &&
+      generation === this.#generation &&
+      this.getSnapshot().state === 'armed' &&
+      this.#playerState === 'playing'
     ) {
-      this.#stopCurrentStream()
+      this.#startAttempt()
+    }
+  }
+
+  #startAttempt() {
+    const stream = this.#stream
+
+    if (
+      this.#disposed ||
+      !this.#practiceEnabled ||
+      this.#playerState !== 'playing' ||
+      this.#snapshot.state !== 'armed' ||
+      stream === null
+    ) {
       return
     }
 
@@ -317,7 +350,7 @@ export class RecorderController {
       chunks: [],
       cleanupRecorderListeners: [],
       finalisationRequested: false,
-      generation,
+      generation: this.#generation,
       recorder,
       watchdogActive: false,
       watchdogHandle: undefined,
@@ -325,21 +358,93 @@ export class RecorderController {
     this.#activeAttempt = attempt
     this.#watchRecorder(attempt)
     this.#publish({
+      errorMessage: null,
+      eventOrder: [],
+      recordedByteCount: 0,
       recorderMimeType: readRecorderMimeType(recorder, selectedMimeType),
     })
+    this.#actor.send({ type: 'PLAYER_PLAYING' })
 
     try {
       recorder.start(recordingTimesliceMilliseconds)
     } catch (error) {
       this.#fail(describeRecorderError(error))
+    }
+  }
+
+  #pauseAttempt() {
+    const attempt = this.#activeAttempt
+
+    if (
+      this.#disposed ||
+      this.#snapshot.state !== 'recording' ||
+      attempt === null
+    ) {
       return
     }
 
+    try {
+      attempt.recorder.pause()
+      if (this.#isCurrentAttempt(attempt)) {
+        this.#actor.send({ type: 'PLAYER_BUFFERING' })
+      }
+    } catch (error) {
+      this.#fail(describeRecorderError(error))
+    }
+  }
+
+  #resumeAttempt() {
+    const attempt = this.#activeAttempt
+
     if (
-      this.#isCurrentAttempt(attempt) &&
-      this.#snapshot.state === 'requestingMic'
+      this.#disposed ||
+      this.#snapshot.state !== 'buffering' ||
+      attempt === null
     ) {
-      this.#actor.send({ type: 'MICROPHONE_GRANTED' })
+      return
+    }
+
+    try {
+      attempt.recorder.resume()
+      if (this.#isCurrentAttempt(attempt)) {
+        this.#actor.send({ type: 'PLAYER_PLAYING' })
+      }
+    } catch (error) {
+      this.#fail(describeRecorderError(error))
+    }
+  }
+
+  #requestFinalisation() {
+    const attempt = this.#activeAttempt
+
+    if (
+      this.#disposed ||
+      !['buffering', 'recording'].includes(this.#snapshot.state) ||
+      attempt === null ||
+      attempt.finalisationRequested
+    ) {
+      return
+    }
+
+    attempt.finalisationRequested = true
+    this.#actor.send({ type: 'PLAYER_STOPPED' })
+    attempt.watchdogActive = true
+    attempt.watchdogHandle = this.#dependencies.clock.setTimeout(() => {
+      if (
+        this.#isCurrentAttempt(attempt) &&
+        attempt.watchdogActive &&
+        this.#snapshot.state === 'finalising'
+      ) {
+        this.#fail(
+          'Recording did not finish within five seconds. The microphone has been stopped; try again.',
+        )
+      }
+    }, finalisationWatchdogMilliseconds)
+
+    try {
+      attempt.recorder.stop()
+    } catch (error) {
+      this.#fail(describeRecorderError(error))
     }
   }
 
@@ -405,7 +510,7 @@ export class RecorderController {
         }
 
         this.#fail(
-          'The microphone disconnected during recording. Every microphone track has been stopped; try again.',
+          'The microphone disconnected during practice. Every microphone track has been stopped; try again.',
         )
       }
 
@@ -425,8 +530,6 @@ export class RecorderController {
     }
 
     this.#clearWatchdog(attempt)
-    this.#intentionalTrackShutdown = true
-    this.#stopCurrentStream()
 
     const chunks = attempt.chunks.filter((chunk) => chunk.size > 0)
     const mimeType =
@@ -471,7 +574,20 @@ export class RecorderController {
       recorderMimeType: completedRecording.mimeType,
       result: completedRecording,
     })
+
+    if (!this.#practiceEnabled || this.#disableAfterFinalisation) {
+      this.#disableAfterFinalisation = false
+      ++this.#generation
+      this.#intentionalTrackShutdown = true
+      this.#stopCurrentStream()
+      this.#actor.send({ type: 'FINALISED_DISABLED' })
+      return
+    }
+
     this.#actor.send({ type: 'FINALISED' })
+    if (this.#playerState === 'playing') {
+      this.#startAttempt()
+    }
   }
 
   #fail(message: string) {
@@ -479,6 +595,8 @@ export class RecorderController {
       return
     }
 
+    this.#practiceEnabled = false
+    this.#disableAfterFinalisation = false
     ++this.#generation
     this.#intentionalTrackShutdown = true
 

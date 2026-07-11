@@ -1,23 +1,23 @@
 # Stage 1 Browser and Device Evidence
 
-Status: In progress
-Last updated: 2026-07-11
+Status: Complete
+Last updated: 2026-07-12
 
-Stage 1 remains in progress until every required real browser and physical mobile-device row passes, or an incompatibility has a documented resolution and a deliberate support decision. Passing Playwright with synthetic media does not close this gate.
+Stage 1 was completed on 2026-07-11 after the production container and every required real browser and physical mobile-device row passed. The operator confirmed the results and reported no unresolved incompatibilities. Playwright's synthetic-media evidence remains complementary rather than a substitute for these real-media runs.
 
-The developer-prechecked video ID is recorded in the operator's external run log with its verification date. Do not add that ID, ngrok credentials, learner audio, or screenshots containing credentials to this repository.
+The developer-prechecked video ID, its verification date, exact browser, operating-system and device versions, operator identity, diagnostics, and evidence locations are recorded in the external operator run log. Do not add the video ID, tunnel credentials, learner audio, or screenshots containing credentials to this repository.
 
 ## Automated evidence
 
 | Surface | Command | Result | Scope and finding |
 | --- | --- | --- | --- |
-| Pinned repository toolchain | `docker run --rm <build-stage-image> npm run check` | Pass on Node 24.18/npm 11.16 on 2026-07-11 | Formatting, lint, strict types, all 34 tests, and all production builds pass under the exact pinned toolchain. The temporary verification image was removed afterward. |
-| Vitest controller and components | `npm test` | Pass, 34 tests on 2026-07-11 | Deterministic coverage for configuration, iframe construction, every controller state, MIME selection and browser fallback, permission denial, unsupported APIs, pause/resume, asynchronous final data/stop ordering, empty output, recorder failure, track loss, five-second watchdog, late permission cleanup, all-track shutdown, accessible controls/status, playback rendering, and object-URL revocation. |
-| Playwright Chromium | `npm run test:e2e` | Pass on 2026-07-11 | Built single-service application with synthetic `stage1_test`, intercepted iframe navigation, and injected media fakes. Confirms one-second timeslice, explicit controls, result playback URL, event diagnostics, track stop, API health, and `http://127.0.0.1:3000` iframe origin. No live media validation. |
-| Playwright Firefox | `npm run test:e2e` | Pass on 2026-07-11 | Same synthetic scope as Chromium. No live media validation. |
-| Playwright WebKit | `npm run test:e2e` | Pass on 2026-07-11 | Same synthetic scope as Chromium. No live media validation. |
+| Pinned repository toolchain | `docker run --rm <build-stage-image> npm run check` | Pass on Node 24.18/npm 11.16 on 2026-07-12 | Formatting, lint, strict types, all 46 tests, and all production builds pass under the exact pinned toolchain. |
+| Vitest controller and components | `npm test` | Pass, 46 tests on 2026-07-12 | Deterministic coverage for configuration, unprocessed microphone constraints and applied-settings diagnostics, API-enabled iframe construction, YouTube state/error mapping, every controller state, post-permission playback reconciliation, MIME selection and browser fallback, permission denial, unsupported APIs, player-driven buffering/resume/finalisation, rapid replay during finalisation, asynchronous final data/stop ordering, empty output, recorder failure, track loss, five-second watchdog, late permission cleanup, all-track shutdown, accessible controls/status, playback rendering, and object-URL revocation. |
+| Playwright Chromium | `npm run test:e2e` | Pass on 2026-07-12 | Built single-service application with synthetic `stage1_test`, intercepted iframe navigation, and injected player/media fakes. Confirms the unprocessed microphone request and reported settings, Practice Mode play/buffer/resume/pause flow, one-second timeslice, result playback URL, event diagnostics, track stop, API health, and `http://127.0.0.1:3000` iframe origin. No live media validation. |
+| Playwright Firefox | `npm run test:e2e` | Pass on 2026-07-12 | Same synthetic scope as Chromium. No live media validation. |
+| Playwright WebKit | `npm run test:e2e` | Pass on 2026-07-12 | Same synthetic scope as Chromium. No live media validation. |
 | Production container plumbing | `VITE_SHADOWING_VIDEO_ID=stage1_test npm run container:build`, health curl, then `npx playwright test` against the running image | Pass on 2026-07-11 | The pinned Node 24 image received the named build argument, served health, and passed the synthetic flow in all three Playwright engines with the exact loopback iframe origin. |
-| Production container real media | See container procedure below | Pending | Must be built with an external real prechecked ID and exercised with a real microphone before this row can pass. |
+| Production container real media | See container procedure below | Pass, operator-confirmed on 2026-07-11 | Built with the externally recorded, currently eligible prechecked ID and exercised with a real microphone. The required recording, playback, lifecycle, and microphone-shutdown checks passed. |
 
 ## Required real-browser matrix
 
@@ -25,13 +25,13 @@ Record exact browser, OS, and device versions, the external fixture-log referenc
 
 | Platform | Browser | Device | Exact versions | Grant | Deny | Concurrent video + mic | Pause/resume/stop order | MIME / bytes | Playback | Backgrounding | Mic shutdown | Result / resolution |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Desktop | Chrome stable | Test computer | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Desktop | Edge stable | Test computer | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Desktop | Firefox stable | Test computer | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Desktop | Safari stable | Test Mac | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Mobile | Safari stable | Physical iPhone | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Tablet | Safari stable | Physical iPad | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
-| Mobile | Chrome stable | Physical Android phone | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
+| Desktop | Chrome stable | Test computer | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
+| Desktop | Edge stable | Test computer | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
+| Desktop | Firefox stable | Test computer | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
+| Desktop | Safari stable | Test Mac | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
+| Mobile | Safari stable | Physical iPhone | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
+| Tablet | Safari stable | Physical iPad | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
+| Mobile | Chrome stable | Physical Android phone | External run log | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass | Pass; operator-confirmed 2026-07-11 |
 
 If one physical Apple device cannot cover both the required iOS and iPadOS rows, both devices remain required. Automated WebKit does not substitute for either physical row.
 
@@ -76,9 +76,11 @@ For each matrix row:
 7. Repeat with refresh or page exit. Use the browser and operating-system privacy indicator or device settings to confirm microphone shutdown; do not rely only on the app label.
 8. Record anomalies, console output, screenshots of non-sensitive UI, and a clear pass/fail result. An incompatibility needs an owner, resolution, retest evidence, or explicit support-decision update.
 
-## Temporary authenticated mobile endpoint
+## Temporary authenticated mobile endpoint fallback
 
-Only expose the local container for a scheduled mobile test window. ngrok's current Agent Endpoint flow accepts a separate Traffic Policy file through `--traffic-policy-file`; its `basic-auth` action rejects missing or invalid credentials with `401` when enforcement is enabled. See the official [Agent Endpoint Traffic Policy quickstart](https://ngrok.com/docs/traffic-policy/getting-started/agent-endpoints) and [`basic-auth` action reference](https://ngrok.com/docs/traffic-policy/actions/basic-auth).
+The completed physical-device runs used the preferred authenticated Cloudflare Tunnel with Access workflow in the [locally hosted testing guide](testing/locally-hosted.md). The Access boundary, authenticated health route, exact HTTPS iframe origin, and shutdown were operator-confirmed on 2026-07-11.
+
+If Cloudflare Tunnel is unavailable during a future retest, expose the local container only for a scheduled mobile test window. ngrok's current Agent Endpoint flow accepts a separate Traffic Policy file through `--traffic-policy-file`; its `basic-auth` action rejects missing or invalid credentials with `401` when enforcement is enabled. See the official [Agent Endpoint Traffic Policy quickstart](https://ngrok.com/docs/traffic-policy/getting-started/agent-endpoints) and [`basic-auth` action reference](https://ngrok.com/docs/traffic-policy/actions/basic-auth).
 
 1. Generate a unique strong temporary password and store the username/password in a password manager or ephemeral shell variables outside the repository. The current action requires passwords of at least eight characters; use a substantially longer random value.
 2. With a restrictive umask, create a temporary policy such as `/tmp/shadowing-recorder-ngrok-policy.yml`. Insert the temporary credential directly into that ignored, short-lived file:
@@ -112,6 +114,6 @@ Only expose the local container for a scheduled mobile test window. ngrok's curr
 
 This tunnel is temporary test infrastructure. It is not a production hosting, authentication, or privacy decision.
 
-## Current finding
+## Final finding
 
-The implementation and synthetic automated coverage are passing locally. Real codec, permission, playback, lifecycle, current-stable desktop browser, physical iOS/iPadOS, physical Android, authenticated tunnel, and real production-container evidence are still pending. Stage 1 is therefore **not complete**.
+The implementation and synthetic automated coverage pass locally. Operator-confirmed production-container testing also passed for real codecs, permissions, playback, lifecycle behavior, every required current-stable desktop browser, physical iOS and iPadOS Safari, physical Android Chrome, and the authenticated Cloudflare tunnel. There are no unresolved Stage 1 incompatibilities, so Stage 1 is **complete**.

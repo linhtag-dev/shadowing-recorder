@@ -5,6 +5,7 @@ export function createFixedVideoEmbedUrl(videoId: string, origin: string) {
 
   url.searchParams.set('autoplay', '0')
   url.searchParams.set('controls', '1')
+  url.searchParams.set('enablejsapi', '1')
   url.searchParams.set('playsinline', '1')
   url.searchParams.set('origin', origin)
 

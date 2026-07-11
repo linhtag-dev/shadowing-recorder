@@ -1,7 +1,7 @@
 # Shadowing Recorder MVP Implementation Plan
 
 Status: Draft  
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Related documents
 
@@ -18,7 +18,7 @@ Completed locally on 2026-07-11. The npm workspace, React/Vite application, Hono
 
 ## Stage 1: Non-public recorder proof of concept
 
-Status: In progress. The fixed-video recorder implementation and synthetic automated browser coverage were completed locally on 2026-07-11. Production-container real-media testing and the required current-stable desktop and physical mobile matrix remain open; see the [Stage 1 browser and device evidence](../stage-1-browser-matrix.md). Do not mark this stage complete until that matrix passes or every incompatibility has an explicit resolution.
+Status: Complete. The fixed-video recorder implementation, synthetic automated browser coverage, production-container real-media testing, and the required current-stable desktop and physical mobile matrix were completed on 2026-07-11; see the [Stage 1 browser and device evidence](../stage-1-browser-matrix.md). The operator reported no unresolved incompatibilities.
 
 - Fixed, developer-prechecked YouTube video.
 - Explicit `Start recording` and `Stop recording` buttons.
@@ -45,11 +45,15 @@ After the local container and fixed-video proof of concept work, select the host
 
 ## Stage 3: Automatic recording controller
 
-- YouTube IFrame Player API integration.
+Status: In progress. The fixed-video build now loads the YouTube IFrame Player API and connects `PLAYING`, `BUFFERING`, `PAUSED`, and `ENDED` events to an explicitly enabled Practice Mode. The remaining Stage 3 items below still require the public eligibility/player identity boundary, timing ownership, and attempt-list implementation.
+
+Chrome's default microphone processing produced choppy learner audio during audible reference playback while muted Chrome playback and Safari on the same Mac were clean. The fixed-video capture now requests echo cancellation, noise suppression, and automatic gain control off and reports the browser-applied settings in diagnostics; this correction was implemented on 2026-07-12.
+
+- YouTube IFrame Player API integration. Initial fixed-video integration completed 2026-07-11.
 - Headphone confirmation and Practice Mode.
-- Serialized `requestingMic`, `armed`, `recording`, `buffering`, and `finalising` states.
-- Post-permission reconciliation and expected-video identity checks.
-- Attempt-scoped recorder/chunk ownership and asynchronous finalisation.
+- Serialized `requestingMic`, `armed`, `recording`, `buffering`, and `finalising` states. Initial fixed-video state flow completed 2026-07-11.
+- Post-permission reconciliation and expected-video identity checks. Playback reconciliation completed 2026-07-11; identity checks remain tied to the Stage 2 eligibility boundary.
+- Attempt-scoped recorder/chunk ownership and asynchronous finalisation. Latest-attempt fixed-video slice completed 2026-07-11; the attempt list remains pending.
 - Draft/generation-scoped timers, operation-token cleanup, and a five-second finalisation watchdog.
 - One-audio-source playback interlock.
 - Attempt list with approximate, discontinuous, and uncertain timing labels.
