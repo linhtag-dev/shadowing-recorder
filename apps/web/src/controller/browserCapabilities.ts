@@ -85,9 +85,9 @@ export const unprocessedMicrophoneConstraints = {
 } as const satisfies MediaTrackConstraints
 
 export const recorderMimeTypeCandidates = [
+  'audio/mp4',
   'audio/webm;codecs=opus',
   'audio/ogg;codecs=opus',
-  'audio/mp4',
 ] as const
 
 export function selectRecorderMimeType(

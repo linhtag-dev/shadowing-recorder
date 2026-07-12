@@ -121,16 +121,17 @@ describe('recorderMachine', () => {
 })
 
 describe('selectRecorderMimeType', () => {
-  it('prefers Opus/WebM, then Opus/Ogg, then MP4, with a default fallback', () => {
+  it('prefers MP4, then Opus/WebM, then Opus/Ogg, with a default fallback', () => {
     const factory = new FakeRecorderFactory()
+    factory.supportedMimeTypes.add('audio/mp4')
 
+    expect(selectRecorderMimeType(factory)).toBe('audio/mp4')
+
+    factory.supportedMimeTypes.delete('audio/mp4')
     expect(selectRecorderMimeType(factory)).toBe('audio/webm;codecs=opus')
 
     factory.supportedMimeTypes = new Set(['audio/ogg;codecs=opus'])
     expect(selectRecorderMimeType(factory)).toBe('audio/ogg;codecs=opus')
-
-    factory.supportedMimeTypes = new Set(['audio/mp4'])
-    expect(selectRecorderMimeType(factory)).toBe('audio/mp4')
 
     factory.supportedMimeTypes.clear()
     expect(selectRecorderMimeType(factory)).toBeUndefined()

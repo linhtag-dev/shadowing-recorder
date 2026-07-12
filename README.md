@@ -41,6 +41,11 @@ during simultaneous reference playback. Browsers may ignore or omit optional
 settings; the diagnostics panel reports what the selected track applied. An
 explicit headphone-confirmation gate is still pending.
 
+Recording format selection currently prefers MP4 when the browser reports it
+as supported, then falls back to Opus in WebM, Opus in Ogg, or the browser
+default. A physical-iPhone Safari 26.5 test produced silent WebM/Opus attempts
+but audible MP4 attempts, so MP4-first avoids that confirmed encoder anomaly.
+
 ## Video and recording ownership
 
 The app starts without a player. It parses the submitted URL locally and uses
