@@ -167,12 +167,28 @@ An iOS Safari 26.5 real-device run produced valid-duration but silent
 on the next attempt. Format selection now prefers supported MP4 as a controlled
 A/B diagnostic before WebM/Ogg. The same physical iPhone produced audible voice
 with `audio/mp4`, confirming the format-specific workaround; the separate
-microphone-lifecycle correction remains pending.
+microphone-lifecycle correction was implemented on 2026-07-12. An initial eager
+refresh still produced a zero-byte second MP4 after learner playback on the
+physical iPhone. The controller now stops every completed attempt's tracks and
+waits in mic-off standby; reference resume stops learner playback before
+obtaining the next generation-bound stream. Current-build real-device retesting
+then exposed a short reference stall because microphone access began only after
+reference audio started. Learner playback pause/end now pre-arms the fresh
+stream, learner playback start releases it, and app-initiated reference playback
+waits for pre-arming. Current-build real-device retesting remains pending.
+
+The same physical-iPhone flow showed that a genuinely silent interval can
+finalise as a zero-byte MP4. Empty output is now a non-fatal discarded attempt:
+the prior playable result is preserved, every current track is stopped, and
+Practice Mode returns to standby with a visible explanation. Real-device
+confirmation of this behavior remains pending.
 
 - YouTube IFrame Player API integration. Initial fixed-video integration completed 2026-07-11.
 - Practice Mode. Implemented for the latest-recording slice; explicit headphone
   confirmation remains pending.
-- Serialized `requestingMic`, `armed`, `recording`, `buffering`, and `finalising` states. Initial fixed-video state flow completed 2026-07-11.
+- Serialized `requestingMic`, `standby`, `armed`, `recording`, `buffering`, and
+  `finalising` states. Initial fixed-video state flow completed 2026-07-11;
+  between-attempt standby was added 2026-07-12.
 - Post-permission reconciliation and expected-video identity checks. Playback reconciliation completed 2026-07-11; generation-scoped replacement and identity validation completed 2026-07-12.
 - Attempt-scoped recorder/chunk ownership and asynchronous finalisation. The
   latest recording retains its immutable source video ID across replacement;
@@ -196,7 +212,9 @@ microphone-lifecycle correction remains pending.
 - Initial visibility/page-exit interruption and microphone-track shutdown are
   implemented. Full lifecycle finalisation semantics, suspension heartbeat, and
   current-build real-device retesting remain.
-- Clear privacy copy and microphone lifecycle.
+- Clear privacy copy and microphone lifecycle. Per-attempt mic-off standby and
+  playback-safe stream pre-arming are implemented; consent/headphone gating and
+  repeated-attempt real-device evidence remain pending.
 - Static deployment automation, no-unexpected-first-party-request verification,
   bundle leakage checks, and local deployment-header verification are complete.
   First-deployment evidence and the public-launch policy review remain pending.

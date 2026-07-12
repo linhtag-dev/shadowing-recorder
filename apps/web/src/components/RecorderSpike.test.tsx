@@ -7,7 +7,10 @@ import type {
   YouTubePlayerApi,
   YouTubePlayerCallbacks,
 } from '../player/youTubePlayer.js'
-import { createFakeRecorderEnvironment } from '../test/recorderFakes.js'
+import {
+  createFakeRecorderEnvironment,
+  FakeStream,
+} from '../test/recorderFakes.js'
 import { FakeYouTubePlayer, FakeYouTubePlayerApi } from '../test/playerFakes.js'
 import { RecorderSpike } from './RecorderSpike.js'
 
@@ -268,14 +271,15 @@ describe('RecorderSpike', () => {
       recorder?.emitStop()
     })
 
-    expect(getRecorderStatus()).toHaveTextContent(
-      'Play the video to start recording',
-    )
+    expect(
+      await screen.findByText('Ready. Play the video to start recording.'),
+    ).toBeInTheDocument()
     expect(screen.getByLabelText('Latest recording playback')).toHaveAttribute(
       'src',
       'blob:recording-1',
     )
-    expect(environment.stream.tracks[0]?.stopCalls).toBe(0)
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(environment.microphone.requestCalls).toBe(1)
 
     fireEvent.click(disable)
     expect(getRecorderStatus()).toHaveTextContent('Practice Mode is off.')
@@ -306,13 +310,15 @@ describe('RecorderSpike', () => {
     ).toBeDisabled()
 
     fireEvent.click(playReference)
-    expect(playerApi.player.playVideoCalls).toBe(1)
+    await waitFor(() => expect(playerApi.player.playVideoCalls).toBe(1))
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Restart reference video' }),
     )
-    expect(playerApi.player.seekToCalls).toEqual([[0, true]])
-    expect(playerApi.player.playVideoCalls).toBe(2)
+    await waitFor(() => {
+      expect(playerApi.player.seekToCalls).toEqual([[0, true]])
+      expect(playerApi.player.playVideoCalls).toBe(2)
+    })
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Enable Practice Mode' }),
@@ -513,7 +519,7 @@ describe('RecorderSpike', () => {
     await screen.findByText('Ready. Play the video to start recording.')
 
     fireEvent.keyDown(document, { altKey: true, code: 'KeyC', key: 'c' })
-    expect(playerApi.player.playVideoCalls).toBe(1)
+    await waitFor(() => expect(playerApi.player.playVideoCalls).toBe(1))
     act(() => {
       playerApi.emitState('playing')
     })
@@ -541,15 +547,24 @@ describe('RecorderSpike', () => {
     fireEvent.play(playback)
     fireEvent.keyDown(document, { altKey: true, code: 'KeyC', key: 'c' })
     expect(pausePlayback).toHaveBeenCalled()
-    expect(playerApi.player.playVideoCalls).toBe(2)
+    await waitFor(() => expect(playerApi.player.playVideoCalls).toBe(2))
   })
 
   it('stops learner playback before a new player-driven attempt', async () => {
     const environment = createFakeRecorderEnvironment()
+    const replacementStream = new FakeStream()
+    const callOrder: string[] = []
+    let requestIndex = 0
+    environment.microphone.requestImplementation = async () => {
+      callOrder.push('microphone')
+      return requestIndex++ === 0 ? environment.stream : replacementStream
+    }
     const playerApi = new FakeYouTubePlayerApi()
     const pausePlayback = vi
       .spyOn(HTMLMediaElement.prototype, 'pause')
-      .mockImplementation(() => undefined)
+      .mockImplementation(() => {
+        callOrder.push('learner playback')
+      })
     const { unmount } = await renderLoadedRecorder({
       dependencies: environment.dependencies,
       playerApi,
@@ -572,15 +587,21 @@ describe('RecorderSpike', () => {
       )
       firstRecorder?.emitStop()
     })
+    expect(environment.microphone.requestCalls).toBe(1)
 
     const playback = screen.getByLabelText('Latest recording playback')
     fireEvent.play(playback)
     expect(playerApi.player.pauseVideoCalls).toBe(1)
+    callOrder.length = 0
 
-    act(() => {
-      playerApi.emitState('playing')
-    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Play reference video' }),
+    )
+    await waitFor(() => expect(playerApi.player.playVideoCalls).toBe(1))
+    act(() => playerApi.emitState('playing'))
+    await screen.findByText('Recording your microphone while the video plays.')
     expect(pausePlayback).toHaveBeenCalled()
+    expect(callOrder.slice(0, 2)).toEqual(['learner playback', 'microphone'])
     expect(environment.recorderFactory.recorders).toHaveLength(2)
     expect(
       screen.queryByLabelText('Latest recording playback'),
@@ -592,6 +613,63 @@ describe('RecorderSpike', () => {
     })
     expect(environment.recorderFactory.recorders[1]?.stopCalls).toBe(1)
     expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(replacementStream.tracks[0]?.stopCalls).toBe(1)
+  })
+
+  it('pre-arms a fresh stream after learner playback ends', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const replacementStream = new FakeStream()
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
+      () => undefined,
+    )
+    let requestIndex = 0
+    environment.microphone.requestImplementation = async () =>
+      requestIndex++ === 0 ? environment.stream : replacementStream
+    const playerApi = new FakeYouTubePlayerApi()
+    await renderLoadedRecorder({
+      dependencies: environment.dependencies,
+      playerApi,
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable Practice Mode' }),
+    )
+    await screen.findByText('Ready. Play the video to start recording.')
+    act(() => playerApi.emitState('playing'))
+    await screen.findByText('Recording your microphone while the video plays.')
+
+    const firstRecorder = environment.recorderFactory.recorders[0]
+    act(() => {
+      playerApi.emitState('paused')
+      firstRecorder?.emitData(new Blob(['first']))
+      firstRecorder?.emitStop()
+    })
+
+    const playback = screen.getByLabelText('Latest recording playback')
+    fireEvent.play(playback)
+    fireEvent.ended(playback)
+    await waitFor(() => expect(environment.microphone.requestCalls).toBe(2))
+    expect(screen.getAllByText('Microphone active')).not.toHaveLength(0)
+
+    act(() => playerApi.emitState('playing'))
+    await screen.findByText('Recording your microphone while the video plays.')
+    expect(environment.microphone.requestCalls).toBe(2)
+    expect(environment.recorderFactory.recorders).toHaveLength(2)
+
+    const secondRecorder = environment.recorderFactory.recorders[1]
+    act(() => {
+      playerApi.emitState('paused')
+      secondRecorder?.emitData(new Blob([]))
+      secondRecorder?.emitStop()
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent('silent attempt')
+    expect(
+      screen.getByRole('button', { name: 'Turn Practice Mode off' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Latest recording playback')).toHaveAttribute(
+      'src',
+      'blob:recording-1',
+    )
   })
 
   it('announces retryable permission and lifecycle errors', async () => {

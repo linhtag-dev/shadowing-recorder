@@ -22,13 +22,14 @@ The controller uses explicit states rather than independent booleans:
 | Controller state | Meaning |
 | --- | --- |
 | `disabled` | No microphone request is pending and no microphone track is live. |
-| `requestingMic` | `getUserMedia()` is pending. Player events may be observed, but no recording may start. |
+| `requestingMic` | Initial or between-attempt `getUserMedia()` is pending. Player events may be observed, but no recording may start. |
+| `standby` | Practice Mode remains enabled between attempts, but no microphone request is pending and no microphone track is live. |
 | `armed` | A microphone stream is live, the expected player identity is valid, and no attempt is being captured. |
 | `recording` | The active attempt's recorder is gathering microphone data. |
 | `buffering` | The same attempt remains open, but its recorder is paused and gathering no data. |
 | `finalising` | `MediaRecorder.stop()` has been requested and the controller is awaiting the final `dataavailable` and `stop` events, bounded by a five-second watchdog. No new recorder may start yet. |
 
-Player, permission, recorder, page-lifecycle, and UI actions must be reduced through one serial controller queue. A `sessionGeneration` is incremented whenever Practice Mode is enabled, cancelled, disabled, or bound to a replacement player. A late permission result or recorder callback may change current controller state only when its captured generation still matches.
+Player, permission, recorder, page-lifecycle, and UI actions must be reduced through one serial controller queue. A `sessionGeneration` is incremented whenever Practice Mode is enabled, cancelled, disabled, refreshed between completed attempts, or bound to a replacement player. A late permission result or recorder callback may change current controller state only when its captured generation still matches.
 
 Each recording uses an attempt-scoped draft containing its own `MediaRecorder`, chunk array, byte count, expected video ID, timing samples, finalisation reason, and completion promise. Event handlers close over that draft; chunks from an old recorder must never be appended to a newer attempt.
 
@@ -60,6 +61,36 @@ Enabling Practice Mode must:
 6. Immediately reconcile `player.getVideoUrl()` and `player.getPlayerState()` after permission resolves. If the expected video is already `PLAYING`, start an attempt at the current player time. Do not wait for another `PLAYING` event; none is guaranteed.
 
 Playback that starts while the permission prompt is open is captured only from the post-permission reconciliation point. The UI must not imply that earlier audio was recorded.
+
+### Between-attempt microphone standby
+
+After a successful normal finalisation while Practice Mode remains enabled,
+release the attempt draft, advance `sessionGeneration`, mark track shutdown as
+intentional, and stop every track in the current microphone stream. Clear the
+reported microphone settings and transition from `finalising` to mic-off
+`standby`. The completed recording remains playable without keeping the next
+capture stream live.
+
+When learner playback pauses or ends while the reference is stopped, advance
+`sessionGeneration`, enter `requestingMic`, and call `getUserMedia()` to
+pre-arm the next attempt before reference audio starts. Starting learner
+playback again cancels a pending request or stops every track in an already
+armed stream and returns to `standby`.
+
+App-initiated reference playback stops and resets learner playback, then waits
+for the current pre-arm request or starts one from `standby` before calling
+`player.playVideo()`. A native YouTube resume uses the stream pre-armed when
+learner playback stopped. If reference playback stops before a request made
+from its `PLAYING` event resolves, stop every track in the returned stream and
+go back to `standby` without creating a recorder.
+
+This refresh prevents a later `MediaRecorder` from reusing a capture stream
+that already backed a stopped recorder. It also prevents an idle next-attempt
+stream from crossing learner playback, which produced a zero-byte second MP4,
+and prevents microphone acquisition after reference audio begins, which caused
+a short reference stall on iOS Safari. A stale or failed request follows the
+same generation guards and fail-safe shutdown as initial microphone
+acquisition.
 
 ### Disabling
 
@@ -107,7 +138,7 @@ The normal-case rule is:
 | Buffering | If recording, call `MediaRecorder.pause()` and enter `buffering`; keep the attempt open without collecting stalled time. |
 | Player error | Finalise the active attempt, disable Practice Mode, stop microphone tracks, and show the mapped error. |
 
-There is no amplitude-based or pedagogical definition of "meaningful audio" in the MVP. Always save a completed, within-limit Blob whose `size > 0`, even when it is very short. Discard a zero-byte Blob and explain that the browser produced no recording.
+There is no amplitude-based or pedagogical definition of "meaningful audio" in the MVP. Always save a completed, within-limit Blob whose `size > 0`, even when it is very short. Treat a zero-byte Blob as a non-fatal empty attempt because iOS Safari may produce one for genuine silence: discard it, preserve the previous playable result, stop every current microphone track, return to `standby` when Practice Mode remains enabled, and explain that nothing was saved. Encoder errors, unexpected track endings, and finalisation timeouts remain fatal.
 
 ### Buffering and page lifecycle
 
@@ -355,10 +386,16 @@ requestFinalise(draft, reason, targetAfterFinalise = armed,
     after resolution, release draft recorder and chunk references
     clear activeDraft if it still points to draft
     if targetAfterFinalise is armed and Practice Mode still belongs to draft.finaliseGeneration:
-        state = armed
-        if pendingReconcile:
-            pendingReconcile = false
-            reconcilePlayerNow()  // uses fresh identity and player state
+        advanceSessionGeneration()
+        mark microphone shutdown intentional
+        stop all tracks in the completed attempt's stream
+        clear applied microphone settings
+        state = standby
+        if pendingReconcile and player is still PLAYING:
+            stop and reset learner playback
+            state = requestingMic
+            request a fresh microphone stream
+            after permission resolves, reconcilePlayerNow()
 
 onMediaRecorderError or unexpectedMicrophoneTrackEnded:
     if shutdown is intentional or event ownership/generation is stale:
@@ -394,7 +431,7 @@ disablePracticeMode:
     state = disabled
 ```
 
-Calling `MediaRecorder.stop()` is only the request boundary. The final `dataavailable` and `stop` events occur asynchronously, in that order. A rapid pause/play therefore queues a fresh reconciliation; it never reuses a recorder being finalised. If play has resumed by the time finalisation completes, a new attempt starts from the then-current player time. This may leave a small, honestly unrecorded gap, but it preserves the play-to-pause attempt boundary and prevents chunk mixing. The watchdog guarantees that neither the controller nor a live microphone stream can remain stuck in `finalising` indefinitely.
+Calling `MediaRecorder.stop()` is only the request boundary. The final `dataavailable` and `stop` events occur asynchronously, in that order. A rapid pause/play therefore queues a fresh reconciliation; it never reuses a recorder being finalised or that recorder's microphone stream. If play has resumed, learner playback is stopped and a new attempt starts from the then-current player time only after fresh microphone access resolves. Otherwise the controller remains in mic-off `standby` until the next `PLAYING` event. This may leave a small, honestly unrecorded gap, but it preserves the play-to-pause attempt boundary and prevents chunk mixing. The watchdog guarantees that neither the controller nor a live microphone stream can remain stuck in `finalising` indefinitely.
 
 ## URL handling
 

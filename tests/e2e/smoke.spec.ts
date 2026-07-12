@@ -27,38 +27,39 @@ test.beforeEach(async ({ page }) => {
       playerPauseCalls: 0,
       playerPlayCalls: 0,
       playerSeekCalls: [] as Array<[number, boolean]>,
+      microphoneRequestCalls: 0,
+      nextRecordingIsEmpty: false,
       requestedUnprocessedAudio: false,
       timeslices: [] as number[],
       trackStopCalls: 0,
     }
-    const tracks = [
-      {
-        addEventListener: () => undefined,
-        getSettings: () => ({
-          autoGainControl: false,
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-          sampleRate: 48_000,
-        }),
-        removeEventListener: () => undefined,
-        stop: () => {
-          ++diagnostics.trackStopCalls
-        },
-      },
-    ]
     const mediaDevices = navigator.mediaDevices ?? {}
 
     Object.defineProperty(mediaDevices, 'getUserMedia', {
       configurable: true,
       value: async (constraints: MediaStreamConstraints) => {
+        ++diagnostics.microphoneRequestCalls
         const audio =
           typeof constraints.audio === 'object' ? constraints.audio : null
         diagnostics.requestedUnprocessedAudio =
           audio?.autoGainControl === false &&
           audio.echoCancellation === false &&
           audio.noiseSuppression === false
-        return { getTracks: () => tracks }
+        const track = {
+          addEventListener: () => undefined,
+          getSettings: () => ({
+            autoGainControl: false,
+            channelCount: 1,
+            echoCancellation: false,
+            noiseSuppression: false,
+            sampleRate: 48_000,
+          }),
+          removeEventListener: () => undefined,
+          stop: () => {
+            ++diagnostics.trackStopCalls
+          },
+        }
+        return { getTracks: () => [track] }
       },
     })
     Object.defineProperty(navigator, 'mediaDevices', {
@@ -98,9 +99,13 @@ test.beforeEach(async ({ page }) => {
       stop() {
         this.state = 'inactive'
         queueMicrotask(() => {
+          const contents = diagnostics.nextRecordingIsEmpty
+            ? ''
+            : 'synthetic audio'
+          diagnostics.nextRecordingIsEmpty = false
           const dataEvent = new Event('dataavailable')
           Object.defineProperty(dataEvent, 'data', {
-            value: new Blob(['synthetic audio'], { type: this.mimeType }),
+            value: new Blob([contents], { type: this.mimeType }),
           })
           this.dispatchEvent(dataEvent)
           this.dispatchEvent(new Event('stop'))
@@ -443,6 +448,56 @@ test('loads a URL-first recorder without application data services', async ({
   await expect(page.getByText('dataavailable (15 bytes)')).toBeVisible()
   await expect(page.getByText('stop', { exact: true })).toBeVisible()
 
+  await page.evaluate(() => {
+    ;(
+      window as typeof window & {
+        __stageOnePlayerFake: { emitState(state: number): void }
+      }
+    ).__stageOnePlayerFake.emitState(1)
+  })
+  await expect(recorderPanel.getByRole('status')).toContainText(
+    'Recording your microphone',
+  )
+  await page.evaluate(() => {
+    ;(
+      window as typeof window & {
+        __stageOnePlayerFake: { emitState(state: number): void }
+      }
+    ).__stageOnePlayerFake.emitState(2)
+  })
+  await expect(recorderPanel.getByRole('status')).toContainText(
+    'Play the video to start recording',
+  )
+
+  const lastPlayableSource = await playback.getAttribute('src')
+  await page.evaluate(() => {
+    ;(
+      window as typeof window & {
+        __stageOneMediaFake: { nextRecordingIsEmpty: boolean }
+      }
+    ).__stageOneMediaFake.nextRecordingIsEmpty = true
+    ;(
+      window as typeof window & {
+        __stageOnePlayerFake: { emitState(state: number): void }
+      }
+    ).__stageOnePlayerFake.emitState(1)
+  })
+  await expect(recorderPanel.getByRole('status')).toContainText(
+    'Recording your microphone',
+  )
+  await page.evaluate(() => {
+    ;(
+      window as typeof window & {
+        __stageOnePlayerFake: { emitState(state: number): void }
+      }
+    ).__stageOnePlayerFake.emitState(2)
+  })
+  await expect(recorderPanel.getByRole('alert')).toContainText('silent attempt')
+  await expect(
+    page.getByRole('button', { name: 'Turn Practice Mode off' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  await expect(playback).toHaveAttribute('src', lastPlayableSource ?? '')
+
   await page.getByRole('button', { name: 'Disable Practice Mode' }).click()
 
   const mediaDiagnostics = await page.evaluate(
@@ -453,6 +508,7 @@ test('loads a URL-first recorder without application data services', async ({
             playerPauseCalls: number
             playerPlayCalls: number
             playerSeekCalls: Array<[number, boolean]>
+            microphoneRequestCalls: number
             requestedUnprocessedAudio: boolean
             timeslices: number[]
             trackStopCalls: number
@@ -464,9 +520,11 @@ test('loads a URL-first recorder without application data services', async ({
     playerPauseCalls: 1,
     playerPlayCalls: 2,
     playerSeekCalls: [[0, true]],
+    microphoneRequestCalls: 3,
+    nextRecordingIsEmpty: false,
     requestedUnprocessedAudio: true,
-    timeslices: [1_000],
-    trackStopCalls: 1,
+    timeslices: [1_000, 1_000, 1_000],
+    trackStopCalls: 3,
   })
 
   expect(unexpectedRequests).toEqual([])

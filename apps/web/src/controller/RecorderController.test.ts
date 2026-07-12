@@ -111,7 +111,16 @@ describe('recorderMachine', () => {
     actor.send({ type: 'PLAYER_STOPPED' })
     expect(actor.getSnapshot().value).toBe('finalising')
     actor.send({ type: 'FINALISED' })
+    expect(actor.getSnapshot().value).toBe('standby')
+    actor.send({ type: 'REQUEST_MICROPHONE' })
+    expect(actor.getSnapshot().value).toBe('requestingMic')
+    actor.send({ type: 'MICROPHONE_NOT_NEEDED' })
+    expect(actor.getSnapshot().value).toBe('standby')
+    actor.send({ type: 'REQUEST_MICROPHONE' })
+    actor.send({ type: 'MICROPHONE_GRANTED' })
     expect(actor.getSnapshot().value).toBe('armed')
+    actor.send({ type: 'RELEASE_MICROPHONE' })
+    expect(actor.getSnapshot().value).toBe('standby')
     actor.send({ type: 'DISABLE' })
     expect(actor.getSnapshot().value).toBe('disabled')
     actor.send({ type: 'ENABLE' })
@@ -168,6 +177,7 @@ describe('RecorderController', () => {
     recorder?.emitData(new Blob(['voice'], { type: 'audio/webm;codecs=opus' }))
     expect(controller.getSnapshot().state).toBe('finalising')
     recorder?.emitStop()
+    expect(controller.getSnapshot().state).toBe('standby')
 
     expect(controller.getSnapshot()).toMatchObject({
       eventOrder: [
@@ -179,15 +189,7 @@ describe('RecorderController', () => {
         'stop',
       ],
       recordedByteCount: 5,
-      microphoneSettings: {
-        autoGainControl: false,
-        channelCount: 1,
-        echoCancellation: false,
-        latency: 0.01,
-        noiseSuppression: false,
-        sampleRate: 48_000,
-        sampleSize: 16,
-      },
+      microphoneSettings: null,
       recorderMimeType: 'audio/webm;codecs=opus',
       result: {
         byteLength: 5,
@@ -195,11 +197,12 @@ describe('RecorderController', () => {
         objectUrl: 'blob:recording-1',
         videoId: 'stage1_test',
       },
-      state: 'armed',
+      state: 'standby',
     })
     expect(environment.stream.tracks.map((track) => track.stopCalls)).toEqual([
-      0, 0,
+      1, 1,
     ])
+    expect(environment.microphone.requestCalls).toBe(1)
     expect(environment.clock.tasks.size).toBe(0)
 
     controller.disable()
@@ -289,7 +292,7 @@ describe('RecorderController', () => {
     expect(controller.getSnapshot().recorderMimeType).toBe('audio/mp4')
   })
 
-  it('rejects empty output only after stop and shuts down Practice Mode', async () => {
+  it('discards empty output without shutting down Practice Mode', async () => {
     const firstTrack = new FakeTrack()
     const secondTrack = new FakeTrack()
     firstTrack.throwOnStop = true
@@ -306,13 +309,47 @@ describe('RecorderController', () => {
     recorder?.emitStop()
 
     expect(controller.getSnapshot()).toMatchObject({
-      errorMessage: expect.stringContaining('returned no audio'),
+      errorMessage: expect.stringContaining('silent attempt'),
       result: null,
-      state: 'error',
+      state: 'standby',
     })
     expect(firstTrack.stopCalls).toBe(1)
     expect(secondTrack.stopCalls).toBe(1)
     expect(environment.objectUrls.blobs).toHaveLength(0)
+  })
+
+  it('preserves the last playable result when a later attempt is empty', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const replacementStream = new FakeStream()
+    let requestIndex = 0
+    environment.microphone.requestImplementation = async () =>
+      requestIndex++ === 0 ? environment.stream : replacementStream
+    const controller = new RecorderController(environment.dependencies)
+
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
+    const firstRecorder = environment.recorderFactory.recorders[0]
+    if (firstRecorder === undefined) {
+      throw new Error('first recorder was not created')
+    }
+    finishRecording(controller, firstRecorder, boundPlayer, 'first')
+    sendPlayerState(controller, boundPlayer, 'playing')
+    await waitForState(controller, 'recording')
+
+    const secondRecorder = environment.recorderFactory.recorders[1]
+    sendPlayerState(controller, boundPlayer, 'stopped')
+    secondRecorder?.emitData(new Blob([]))
+    secondRecorder?.emitStop()
+
+    expect(controller.getSnapshot()).toMatchObject({
+      errorMessage: expect.stringContaining('nothing was saved'),
+      recordedByteCount: 0,
+      result: {
+        objectUrl: 'blob:recording-1',
+      },
+      state: 'standby',
+    })
+    expect(environment.objectUrls.revokedUrls).toEqual([])
+    expect(replacementStream.tracks[0]?.stopCalls).toBe(1)
   })
 
   it('fails safely on recorder errors and unexpected track endings', async () => {
@@ -394,6 +431,10 @@ describe('RecorderController', () => {
 
   it('starts a fresh attempt when playback resumes during finalisation', async () => {
     const environment = createFakeRecorderEnvironment()
+    const replacementStream = new FakeStream()
+    let requestIndex = 0
+    environment.microphone.requestImplementation = async () =>
+      requestIndex++ === 0 ? environment.stream : replacementStream
     const controller = new RecorderController(environment.dependencies)
 
     const boundPlayer = await startPlayerDrivenAttempt(controller)
@@ -403,11 +444,75 @@ describe('RecorderController', () => {
     firstRecorder?.emitData(new Blob(['first']))
     firstRecorder?.emitStop()
 
+    await waitForState(controller, 'recording')
     expect(controller.getSnapshot().state).toBe('recording')
     expect(environment.recorderFactory.recorders).toHaveLength(2)
     expect(environment.recorderFactory.recorders[1]?.startCalls).toEqual([
       1_000,
     ])
+    expect(environment.microphone.requestCalls).toBe(2)
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(replacementStream.tracks[0]?.stopCalls).toBe(0)
+  })
+
+  it('releases a between-attempt stream when playback stops before access resolves', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const replacementStream = new FakeStream()
+    let resolveReplacement: ((stream: FakeStream) => void) | undefined
+    environment.microphone.requestImplementation = async () =>
+      environment.stream
+    const controller = new RecorderController(environment.dependencies)
+
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
+    const firstRecorder = environment.recorderFactory.recorders[0]
+    if (firstRecorder === undefined) {
+      throw new Error('first recorder was not created')
+    }
+    finishRecording(controller, firstRecorder, boundPlayer, 'first')
+    expect(controller.getSnapshot().state).toBe('standby')
+
+    environment.microphone.requestImplementation = () =>
+      new Promise((resolve) => {
+        resolveReplacement = resolve
+      })
+    sendPlayerState(controller, boundPlayer, 'playing')
+    expect(controller.getSnapshot().state).toBe('requestingMic')
+    sendPlayerState(controller, boundPlayer, 'stopped')
+    resolveReplacement?.(replacementStream)
+
+    await waitForState(controller, 'standby')
+    expect(replacementStream.tracks[0]?.stopCalls).toBe(1)
+    expect(environment.recorderFactory.recorders).toHaveLength(1)
+    expect(controller.getSnapshot().result?.objectUrl).toBe('blob:recording-1')
+  })
+
+  it('releases a pre-armed stream for learner playback and primes a fresh one afterward', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const replacementStream = new FakeStream()
+    const streams = [environment.stream, replacementStream]
+    environment.microphone.requestImplementation = async () => {
+      const stream = streams[environment.microphone.requestCalls - 1]
+      if (stream === undefined) {
+        throw new Error('unexpected microphone request')
+      }
+      return stream
+    }
+    const controller = new RecorderController(environment.dependencies)
+    const boundPlayer = await enablePracticeMode(controller)
+
+    expect(
+      controller.prepareForLearnerPlayback(boundPlayer.binding).status,
+    ).toBe('valid')
+    expect(controller.getSnapshot().state).toBe('standby')
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+
+    expect(
+      (await controller.prepareForReferencePlayback(boundPlayer.binding))
+        .status,
+    ).toBe('valid')
+    expect(controller.getSnapshot().state).toBe('armed')
+    expect(environment.microphone.requestCalls).toBe(2)
+    expect(replacementStream.tracks[0]?.stopCalls).toBe(0)
   })
 
   it('finishes an active attempt before disabling and stopping tracks', async () => {
@@ -428,8 +533,17 @@ describe('RecorderController', () => {
     expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
   })
 
-  it('revokes replaced and disposed URLs while reusing one armed stream', async () => {
+  it('revokes replaced and disposed URLs while refreshing the armed stream', async () => {
     const environment = createFakeRecorderEnvironment()
+    const secondStream = new FakeStream()
+    const streams = [environment.stream, secondStream]
+    environment.microphone.requestImplementation = async () => {
+      const stream = streams[environment.microphone.requestCalls - 1]
+      if (stream === undefined) {
+        throw new Error('unexpected microphone request')
+      }
+      return stream
+    }
     const controller = new RecorderController(environment.dependencies)
 
     const boundPlayer = await startPlayerDrivenAttempt(controller)
@@ -438,6 +552,7 @@ describe('RecorderController', () => {
       throw new Error('first recorder was not created')
     }
     finishRecording(controller, firstRecorder, boundPlayer, 'first')
+    expect(controller.getSnapshot().state).toBe('standby')
     expect(controller.getSnapshot().result?.objectUrl).toBe('blob:recording-1')
 
     sendPlayerState(controller, boundPlayer, 'playing')
@@ -447,11 +562,13 @@ describe('RecorderController', () => {
       throw new Error('second recorder was not created')
     }
     finishRecording(controller, secondRecorder, boundPlayer, 'second')
+    expect(controller.getSnapshot().state).toBe('standby')
 
     expect(controller.getSnapshot().result?.objectUrl).toBe('blob:recording-2')
     expect(environment.objectUrls.revokedUrls).toEqual(['blob:recording-1'])
-    expect(environment.microphone.requestCalls).toBe(1)
-    expect(environment.stream.tracks[0]?.stopCalls).toBe(0)
+    expect(environment.microphone.requestCalls).toBe(2)
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(secondStream.tracks[0]?.stopCalls).toBe(1)
 
     controller.dispose()
     expect(environment.objectUrls.revokedUrls).toEqual([
@@ -459,6 +576,7 @@ describe('RecorderController', () => {
       'blob:recording-2',
     ])
     expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(secondStream.tracks[0]?.stopCalls).toBe(1)
   })
 
   it('rejects a player whose verified URL does not match its expected ID', () => {
