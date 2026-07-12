@@ -10,7 +10,7 @@ Stage 1 was completed on 2026-07-11 after the production container and every req
 > and findings. The repository now uses an in-page dynamic URL loader and
 > Practice Mode. Do not use the historical procedure below as current test
 > instructions; use the
-> [locally hosted current-build guide](testing/locally-hosted.md).
+> [locally hosted current-build guide](../locally-hosted.md).
 
 The developer-prechecked video ID, its verification date, exact browser, operating-system and device versions, operator identity, diagnostics, and evidence locations are recorded in the external operator run log. Do not add the video ID, tunnel credentials, learner audio, or screenshots containing credentials to this repository.
 
@@ -85,11 +85,11 @@ For each matrix row:
 
 ## Temporary authenticated mobile endpoint fallback
 
-The completed physical-device runs used the preferred authenticated Cloudflare Tunnel with Access workflow in the [locally hosted testing guide](testing/locally-hosted.md). The Access boundary, authenticated health route, exact HTTPS iframe origin, and shutdown were operator-confirmed on 2026-07-11.
+The completed physical-device runs used the preferred authenticated Cloudflare Tunnel with Access workflow in the [locally hosted testing guide](../locally-hosted.md). The Access boundary, authenticated health route, exact HTTPS iframe origin, and shutdown were operator-confirmed on 2026-07-11.
 
 The fallback below is also part of the historical Stage 1 procedure. For a
 current-build retest, follow the current
-[locally hosted test guide](testing/locally-hosted.md).
+[locally hosted test guide](../locally-hosted.md).
 
 During the completed Stage 1 run, the ngrok Agent Endpoint flow accepted a
 separate Traffic Policy file through `--traffic-policy-file`; its `basic-auth`

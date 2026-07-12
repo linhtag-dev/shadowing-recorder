@@ -99,8 +99,8 @@ player, recorder, routing, preview, deployment, or browser-boundary changes.
   rollback procedures.
 - `docs/maintainers/decisions/` contains accepted and superseded architecture
   decisions; do not rewrite historical decisions to look current.
-- `docs/maintainers/stage-1-browser-matrix.md` is historical evidence, not the
-  current test procedure.
+- `docs/maintainers/testing/evidence/stage-1-browser-matrix.md` is historical
+  evidence, not the current test procedure.
 
 Update the README and implementation plan when behavior changes. Update
 requirements, design, privacy rules, or an ADR only when their owned decision

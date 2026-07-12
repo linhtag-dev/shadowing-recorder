@@ -29,7 +29,7 @@ evidence remains historical and is not rewritten to match the current topology.
 
 ## Stage 1: Non-public recorder proof of concept
 
-Status: Complete. The fixed-video recorder implementation, synthetic automated browser coverage, production-container real-media testing, and the required current-stable desktop and physical mobile matrix were completed on 2026-07-11; see the [Stage 1 browser and device evidence](../stage-1-browser-matrix.md). The operator reported no unresolved incompatibilities.
+Status: Complete. The fixed-video recorder implementation, synthetic automated browser coverage, production-container real-media testing, and the required current-stable desktop and physical mobile matrix were completed on 2026-07-11; see the [Stage 1 browser and device evidence](../testing/evidence/stage-1-browser-matrix.md). The operator reported no unresolved incompatibilities.
 
 - Fixed, developer-prechecked YouTube video.
 - Explicit `Start recording` and `Stop recording` buttons.
