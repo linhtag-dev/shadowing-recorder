@@ -11,6 +11,12 @@ Last updated: 2026-07-12
 
 This document defines the browser runtime design for the MVP: controller ownership, recording behavior, lifecycle safety, local video-load transactions, playback interlocks, and error recovery. Product scope and acceptance remain in the MVP requirements.
 
+The focused
+[microphone and playback lifecycle](microphone-and-playback-lifecycle.md)
+documents the implemented coordination among Practice Mode, microphone tracks,
+YouTube reference playback, and learner-recording playback, including the iOS
+Safari rationale.
+
 ## Practice Mode
 
 The application must not record every time any YouTube video is played. Recording is allowed only while Practice Mode is explicitly armed for the currently selected and locally validated `expectedVideoId`.

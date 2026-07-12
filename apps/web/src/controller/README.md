@@ -1,5 +1,9 @@
 # Controller boundary
 
+See the maintainer
+[microphone and playback lifecycle](../../../../docs/maintainers/design/microphone-and-playback-lifecycle.md)
+for the complete state, source-switching, failure, and iOS compatibility design.
+
 The recorder keeps its Practice Mode states in the small XState machine here and injects microphone, MediaRecorder, object-URL, and clock capabilities through browser adapters. The controller owns only session-local Blob data; it has no API or shared-contract path.
 
 The dynamic YouTube player is attached through an immutable binding containing its load generation, expected video ID, and current URL/state readers. The controller revalidates that binding at readiness, before enabling, for every player callback, after microphone permission, before recorder start/resume, and before comparison playback. Stale bindings are no-ops. Identity failure invalidates the player and safely shuts down Practice Mode.
