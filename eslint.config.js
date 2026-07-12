@@ -9,6 +9,7 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/node_modules/**',
+      '.wrangler/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
@@ -40,17 +41,6 @@ export default tseslint.config(
           name: 'process',
           message:
             'Browser code must use explicitly public Vite configuration, never server environment variables.',
-        },
-      ],
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['@shadowing-recorder/api', '@shadowing-recorder/api/*'],
-              message: 'The API workspace is a server-only boundary.',
-            },
-          ],
         },
       ],
     },

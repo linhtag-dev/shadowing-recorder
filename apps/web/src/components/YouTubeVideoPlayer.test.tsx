@@ -10,9 +10,12 @@ import { createYouTubeEmbedUrl } from '../videoEmbed.js'
 import { YouTubeVideoPlayer } from './YouTubeVideoPlayer.js'
 
 describe('YouTubeVideoPlayer', () => {
-  it('builds a privacy-enhanced, API-enabled URL with native controls', () => {
+  it('builds a privacy-enhanced URL with the production origin', () => {
     const embedUrl = new URL(
-      createYouTubeEmbedUrl('stage1_test', 'https://preview.example'),
+      createYouTubeEmbedUrl(
+        'stage1_test',
+        'https://shadowing-recorder.htag.uk',
+      ),
     )
 
     expect(embedUrl.origin).toBe('https://www.youtube-nocookie.com')
@@ -21,7 +24,7 @@ describe('YouTubeVideoPlayer', () => {
       autoplay: '0',
       controls: '1',
       enablejsapi: '1',
-      origin: 'https://preview.example',
+      origin: 'https://shadowing-recorder.htag.uk',
       playsinline: '1',
     })
   })
@@ -75,13 +78,14 @@ describe('YouTubeVideoPlayer', () => {
     render(
       <YouTubeVideoPlayer
         loadGeneration={1}
-        origin="http://127.0.0.1:3000"
         playerApi={playerApi}
         videoId="stage1_test"
       />,
     )
 
     const iframe = screen.getByTitle('Shadowing practice video')
+    const src = new URL(iframe.getAttribute('src') ?? '')
+    expect(src.searchParams.get('origin')).toBe(window.location.origin)
     await waitFor(() => {
       expect(playerApi.callbacks).not.toBeNull()
     })

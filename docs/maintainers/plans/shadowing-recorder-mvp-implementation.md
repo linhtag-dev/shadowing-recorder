@@ -9,6 +9,8 @@ Last updated: 2026-07-12
 - [Technical design](../design/shadowing-recorder-technical-design.md)
 - [MVP technology stack and foundation plan](shadowing-recorder-mvp-technology-stack.md)
 - [YouTube embed and privacy rules](../rules/youtube-compliance-and-privacy.md)
+- [Cloudflare hosting and canonical-origin decision](../decisions/0005-cloudflare-workers-static-assets.md)
+- [Cloudflare production rollout runbook](../release/cloudflare-rollout.md)
 
 This plan defines delivery sequence and records implementation status. The root
 [README](../../../README.md) describes the current runnable build. Completion is
@@ -17,14 +19,13 @@ implementation alone.
 
 ## Foundation: walking skeleton
 
-Completed locally on 2026-07-11. The npm workspace, React/Vite application,
-Hono walking-skeleton server, shared contracts, quality checks, three-engine
-browser smoke test, and single-service preview container are in place. GitHub
-Actions is configured to run the same checks; each pull request remains
-responsible for confirming its hosted run. No YouTube, microphone, or recording
-behavior was included in this foundation. The Hono server and eligibility
-contracts are scaffold artifacts, not requirements of the accepted static
-production architecture.
+Completed locally on 2026-07-11. The original npm workspace, React/Vite
+application, Hono walking-skeleton server, shared contracts, quality checks,
+three-engine browser smoke test, and single-service preview container proved
+the initial plumbing. The server, contracts, health route, and container were
+historical scaffold rather than accepted product architecture and were removed
+when the static Cloudflare foundation was implemented on 2026-07-12. Stage 1
+evidence remains historical and is not rewritten to match the current topology.
 
 ## Stage 1: Non-public recorder proof of concept
 
@@ -40,7 +41,35 @@ Status: Complete. The fixed-video recorder implementation, synthetic automated b
 
 ## Static production deployment checkpoint
 
-After the local container and fixed-video proof of concept work, select a static hosting path with HTTPS, canonical-origin redirects, SPA fallback behaviour, deployment-header control, and a reproducible rollback. No application secret, YouTube Data API quota, runtime API, or server-side learner-data path belongs in this checkpoint.
+Status: Deployment-readiness implementation complete on 2026-07-12; first
+production deployment and smoke evidence pending.
+
+Cloudflare Workers Static Assets is selected for the canonical
+`https://shadowing-recorder.htag.uk` origin. The retained repository contains
+only the `apps/web` workspace. Pinned Wrangler configuration now owns the custom
+domain, disabled `workers.dev` and preview URLs, disabled observability, static
+asset directory, and SPA fallback. The artifact includes security/no-index
+headers and a crawler disallow file; fingerprinted assets receive immutable
+caching.
+
+The Hono API, `/api/health`, shared contracts, server environment example,
+container, and dead health UI are removed. Vite has no API proxy. The automated
+suite checks deep-link fallback, application 404 rendering, required headers,
+immutable caching, exact privacy-enhanced iframe origin behavior, forbidden
+runtime request targets, and absence of application API URLs, Google API keys,
+or selected fixtures in the production bundle. `npm run check` includes a
+Wrangler deployment dry run.
+
+Cloudflare Workers Builds must use the repository root, project name
+`shadowing-recorder`, production branch `main`, cache enabled, non-production
+branch builds disabled, `SKIP_DEPENDENCY_INSTALL=1`, the pinned npm install/check
+command, and the checked-in Wrangler deploy command. No runtime variable or
+secret is configured. GitHub verification must be required before merge.
+
+Operational completion still requires the first deployment plus recorded
+DNS/TLS, SPA, header, microphone, playback, exact iframe origin, Referer/error
+153, request-boundary, Web Analytics, and Workers-observability checks. A local
+dry run does not satisfy that evidence requirement.
 
 ## Stage 2: Public embed and policy foundation
 
@@ -49,7 +78,8 @@ load-generation replacement transaction, exact player-identity boundary,
 source-labelled latest recording, and responsive video/Practice Mode setup were
 completed on 2026-07-12. Consent, public terms/privacy links, official
 attribution, explicit headphone confirmation, and the other launch-policy work
-remain pending; this build therefore remains non-public.
+remain pending. The deployment may be publicly reachable for validation, but
+`noindex` is not access control and does not make it public-launch-ready.
 
 - App terms, privacy policy, required links, and versioned acceptance gate.
 - Compliant `Shadowing Recorder` naming and official `Developed with YouTube` attribution.
@@ -102,4 +132,6 @@ Chrome's default microphone processing produced choppy learner audio during audi
   implemented. Full lifecycle finalisation semantics, suspension heartbeat, and
   current-build real-device retesting remain.
 - Clear privacy copy and microphone lifecycle.
-- Static deployment checks, release-policy review, no-unexpected-first-party-request verification, and deployment-header verification.
+- Static deployment automation, no-unexpected-first-party-request verification,
+  bundle leakage checks, and local deployment-header verification are complete.
+  First-deployment evidence and the public-launch policy review remain pending.

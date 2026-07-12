@@ -1,5 +1,26 @@
 import { expect, test } from '@playwright/test'
 
+function isUnexpectedRuntimeRequest(rawUrl: string) {
+  const url = new URL(rawUrl)
+  const hostname = url.hostname.toLowerCase()
+  const pathname = url.pathname.toLowerCase()
+  const isFirstParty = hostname === '127.0.0.1' && url.port === '3000'
+  const isYouTubeDataApi =
+    hostname === 'youtube.googleapis.com' ||
+    (hostname === 'www.googleapis.com' && pathname.startsWith('/youtube/'))
+  const isAnalyticsOrTelemetry =
+    hostname.includes('analytics') ||
+    hostname.includes('telemetry') ||
+    hostname === 'static.cloudflareinsights.com' ||
+    /\/(?:analytics|telemetry)(?:\/|$)/u.test(pathname)
+
+  return (
+    (isFirstParty && /^\/api(?:\/|$)/u.test(pathname)) ||
+    isYouTubeDataApi ||
+    isAnalyticsOrTelemetry
+  )
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     const diagnostics = {
@@ -187,8 +208,16 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test('loads a URL-first recorder and API from one origin', async ({ page }) => {
+test('loads a URL-first recorder without application data services', async ({
+  page,
+}) => {
+  const unexpectedRequests: string[] = []
   let iframeRequestUrl: string | undefined
+  page.on('request', (request) => {
+    if (isUnexpectedRuntimeRequest(request.url())) {
+      unexpectedRequests.push(request.url())
+    }
+  })
   await page.route('https://www.youtube-nocookie.com/**', async (route) => {
     iframeRequestUrl = route.request().url()
     await route.fulfill({
@@ -440,8 +469,5 @@ test('loads a URL-first recorder and API from one origin', async ({ page }) => {
     trackStopCalls: 1,
   })
 
-  const healthResponse = await page.request.get('/api/health')
-
-  expect(healthResponse.ok()).toBe(true)
-  await expect(healthResponse.json()).resolves.toEqual({ status: 'ok' })
+  expect(unexpectedRequests).toEqual([])
 })

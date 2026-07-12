@@ -185,6 +185,16 @@ browser sends player traffic directly to YouTube. No learner-selected URL,
 player event, microphone data, recording, diagnostic, or consent state is sent
 to the app operator.
 
+Vite emits the static production artifact in `apps/web/dist`. Cloudflare Workers
+Static Assets serves that directory at
+`https://shadowing-recorder.htag.uk` without a Worker script. Wrangler owns the
+custom-domain route and SPA fallback; `_headers` owns security, Referer,
+no-index, and fingerprinted-asset cache policy. `workers.dev`, preview URLs,
+Workers observability, Cloudflare Web Analytics, bindings, variables, and
+secrets remain disabled. Unknown navigation paths receive the SPA shell, then
+React Router renders the application 404; no health or application API route is
+part of the runtime.
+
 ### Uniform privacy behaviour
 
 The app does not classify Made for Kids, live, embeddability, category,
@@ -221,7 +231,7 @@ Use the official [YouTube IFrame Player API](https://developers.google.com/youtu
 Recommended configuration:
 
 - `enablejsapi=1` to enable JavaScript control.
-- `origin=https://htag.uk` in production to identify the embedding application; use the explicitly configured current application origin in non-production environments.
+- `origin=https://shadowing-recorder.htag.uk` in production to identify the embedding application; derive it from the current application origin so explicitly approved non-production environments identify themselves accurately.
 - `controls=1` to preserve the native player controls.
 - `playsinline=1` for inline playback on supported mobile browsers.
 - `autoplay=0`; the learner initiates playback.
@@ -229,7 +239,7 @@ Recommended configuration:
 
 Create the player only from a locally validated candidate ID and bind that ID as the player instance's immutable `expectedVideoId`. Register documented callbacks such as `onReady`, `onStateChange`, and `onError`; do not assume a video-change callback exists.
 
-The deployed page must send an HTTP `Referer` header or equivalent API Client identity to YouTube. Do not use `Referrer-Policy: no-referrer` or an iframe `referrerpolicy` that suppresses identity; `strict-origin-when-cross-origin` is an acceptable deployment default. In production, keep `origin` exactly aligned with the canonical `https://htag.uk` origin. Treat IFrame error `153` as a deployment/configuration failure and explain that the player request lacked required client identification.
+The deployed page must send an HTTP `Referer` header or equivalent API Client identity to YouTube. Do not use `Referrer-Policy: no-referrer` or an iframe `referrerpolicy` that suppresses identity; the deployment and iframe both use `strict-origin-when-cross-origin`. In production, keep `origin` exactly aligned with the canonical `https://shadowing-recorder.htag.uk` origin. Treat IFrame error `153` as a deployment/configuration failure and explain that the player request lacked required client identification.
 
 The player remains visible and interactive. The application must not cover or interfere with YouTube branding, controls, advertisements, or required functionality.
 

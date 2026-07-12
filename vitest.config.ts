@@ -7,20 +7,6 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'contracts',
-          environment: 'node',
-          include: ['packages/contracts/src/**/*.test.ts'],
-        },
-      },
-      {
-        test: {
-          name: 'api',
-          environment: 'node',
-          include: ['apps/api/src/**/*.test.ts'],
-        },
-      },
-      {
-        test: {
           name: 'web-unit',
           environment: 'node',
           include: ['apps/web/src/**/*.test.ts'],

@@ -1,6 +1,6 @@
 # ADR 0003: Canonical Application Origin
 
-Status: Accepted  
+Status: Superseded by [ADR 0005](0005-cloudflare-workers-static-assets.md)
 Date: 2026-07-11
 Updated: 2026-07-12
 

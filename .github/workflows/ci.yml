@@ -25,13 +25,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npx --yes npm@11.16.0 ci
 
       - name: Run static checks, unit tests, and builds
-        run: npm run check
+        run: npx --yes npm@11.16.0 run check
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
 
       - name: Run browser smoke tests
-        run: npm run test:e2e
+        run: npx --yes npm@11.16.0 run test:e2e

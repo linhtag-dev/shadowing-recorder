@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "shadowing-recorder",
+  "compatibility_date": "2026-07-12",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "shadowing-recorder.htag.uk",
+      "custom_domain": true,
+    },
+  ],
+  "observability": {
+    "enabled": false,
+  },
+  "assets": {
+    "directory": "./apps/web/dist",
+    "not_found_handling": "single-page-application",
+  },
+}

@@ -11,8 +11,9 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run start',
-    url: 'http://127.0.0.1:3000/api/health',
+    command:
+      'XDG_CONFIG_HOME=.wrangler/config XDG_CACHE_HOME=.wrangler/cache WRANGLER_LOG_PATH=.wrangler/logs wrangler dev --ip 127.0.0.1 --port 3000 --compatibility-date 2026-07-09',
+    url: 'http://127.0.0.1:3000/',
     reuseExistingServer: !process.env.CI,
   },
   projects: [
