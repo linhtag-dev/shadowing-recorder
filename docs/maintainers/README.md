@@ -11,6 +11,7 @@ accepted decisions, and historical evidence.
 | What is complete and what remains? | [MVP implementation plan](plans/shadowing-recorder-mvp-implementation.md) |
 | What must the public MVP do? | [MVP requirements](requirements/shadowing-recorder-mvp.md) |
 | How must runtime state, media, and failures behave? | [Technical design](design/shadowing-recorder-technical-design.md) |
+| How do microphone, reference playback, and learner playback coordinate? | [Microphone and playback lifecycle](design/microphone-and-playback-lifecycle.md) |
 | Which stack and repository direction are accepted? | [MVP technology stack](plans/shadowing-recorder-mvp-technology-stack.md) |
 | What blocks public launch on privacy or YouTube policy? | [YouTube embed and privacy rules](rules/youtube-compliance-and-privacy.md) |
 | How is Cloudflare production configured, deployed, verified, and rolled back? | [Cloudflare rollout runbook](release/cloudflare-rollout.md) |
