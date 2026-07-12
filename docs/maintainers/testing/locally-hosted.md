@@ -5,7 +5,7 @@ same-machine Wrangler preview and on real browsers/devices against
 `https://shadowing-recorder.htag.uk`. Cloudflare setup, deployment, HTTP smoke
 checks, evidence completion, and rollback are owned by the
 [Cloudflare rollout runbook](../release/cloudflare-rollout.md). The
-[Stage 1 browser matrix](../stage-1-browser-matrix.md) preserves the old
+[Stage 1 browser matrix](evidence/stage-1-browser-matrix.md) preserves the old
 container/tunnel evidence and must not be treated as the current procedure.
 
 The site may be publicly reachable during validation but is not

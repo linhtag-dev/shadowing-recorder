@@ -7,16 +7,18 @@ accepted decisions, and historical evidence.
 
 | Question | Source |
 | --- | --- |
-| What works in the repository now? | Root [README](../../README.md) |
+| What works in the repository now? | Root [README](../../README.md) and [user reference](../users/reference/recording-privacy-and-browser-behavior.md) |
+| How does a learner use the current build? | [Practice guide](../users/how-to-guides/practice-with-a-youtube-video.md) |
 | What is complete and what remains? | [MVP implementation plan](plans/shadowing-recorder-mvp-implementation.md) |
 | What must the public MVP do? | [MVP requirements](requirements/shadowing-recorder-mvp.md) |
 | How must runtime state, media, and failures behave? | [Technical design](design/shadowing-recorder-technical-design.md) |
 | How do microphone, reference playback, and learner playback coordinate? | [Microphone and playback lifecycle](design/microphone-and-playback-lifecycle.md) |
 | Which stack and repository direction are accepted? | [MVP technology stack](plans/shadowing-recorder-mvp-technology-stack.md) |
+| How is the repository developed and automatically verified? | [Development and verification](contributing/development-and-verification.md) |
 | What blocks public launch on privacy or YouTube policy? | [YouTube embed and privacy rules](rules/youtube-compliance-and-privacy.md) |
 | How is Cloudflare production configured, deployed, verified, and rolled back? | [Cloudflare rollout runbook](release/cloudflare-rollout.md) |
 | How is the current build verified on real devices? | [Real-device test guide](testing/locally-hosted.md) |
-| What did the fixed-video Stage 1 run prove? | [Stage 1 browser evidence](stage-1-browser-matrix.md) |
+| What did the fixed-video Stage 1 run prove? | [Stage 1 browser evidence](testing/evidence/stage-1-browser-matrix.md) |
 
 The requirements and technical design describe the target MVP and therefore
 include behavior that is not implemented yet. The implementation plan records
@@ -42,10 +44,18 @@ historical note when the current repository moves on. Current browser/device
 procedures belong in `testing/`, release procedures in `release/`, and neither
 belongs in an old evidence record.
 
+## Exploratory work
+
+[TTS shadowing and prosody feedback](ideation/prosody-shadowing-design.md)
+explores a possible future product direction. It is not part of the accepted
+MVP requirements, current technical design, or implementation plan.
+
 ## Updating documentation
 
-- Update the root README and implementation plan with each implemented behavior
-  change.
+- Update the root README, relevant user documentation, and implementation plan
+  with each implemented behavior change.
+- Update the development and verification guide when supported repository
+  commands or automated test responsibilities change.
 - Update requirements when product scope or acceptance changes.
 - Update the technical design when target runtime semantics or failure handling
   changes.
