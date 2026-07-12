@@ -162,6 +162,13 @@ and the attempt list remain.
 
 Chrome's default microphone processing produced choppy learner audio during audible reference playback while muted Chrome playback and Safari on the same Mac were clean. The fixed-video capture now requests echo cancellation, noise suppression, and automatic gain control off and reports the browser-applied settings in diagnostics; this correction was implemented on 2026-07-12.
 
+An iOS Safari 26.5 real-device run produced valid-duration but silent
+`audio/webm;codecs=opus` attempts and exposed a separate retained-stream failure
+on the next attempt. Format selection now prefers supported MP4 as a controlled
+A/B diagnostic before WebM/Ogg. The same physical iPhone produced audible voice
+with `audio/mp4`, confirming the format-specific workaround; the separate
+microphone-lifecycle correction remains pending.
+
 - YouTube IFrame Player API integration. Initial fixed-video integration completed 2026-07-11.
 - Practice Mode. Implemented for the latest-recording slice; explicit headphone
   confirmation remains pending.
