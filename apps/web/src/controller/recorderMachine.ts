@@ -8,6 +8,7 @@ export type RecorderState =
   | 'finalising'
   | 'recording'
   | 'requestingMic'
+  | 'standby'
 
 export type RecorderMachineEvent =
   | { type: 'DISABLE' }
@@ -16,9 +17,12 @@ export type RecorderMachineEvent =
   | { type: 'FINALISED' }
   | { type: 'FINALISED_DISABLED' }
   | { type: 'MICROPHONE_GRANTED' }
+  | { type: 'MICROPHONE_NOT_NEEDED' }
   | { type: 'PLAYER_BUFFERING' }
   | { type: 'PLAYER_PLAYING' }
   | { type: 'PLAYER_STOPPED' }
+  | { type: 'RELEASE_MICROPHONE' }
+  | { type: 'REQUEST_MICROPHONE' }
 
 export const recorderMachine = createMachine({
   id: 'practiceRecorder',
@@ -29,6 +33,7 @@ export const recorderMachine = createMachine({
         DISABLE: 'disabled',
         FAILURE: 'error',
         PLAYER_PLAYING: 'recording',
+        RELEASE_MICROPHONE: 'standby',
       },
     },
     buffering: {
@@ -52,7 +57,7 @@ export const recorderMachine = createMachine({
     finalising: {
       on: {
         FAILURE: 'error',
-        FINALISED: 'armed',
+        FINALISED: 'standby',
         FINALISED_DISABLED: 'disabled',
       },
     },
@@ -68,6 +73,14 @@ export const recorderMachine = createMachine({
         DISABLE: 'disabled',
         FAILURE: 'error',
         MICROPHONE_GRANTED: 'armed',
+        MICROPHONE_NOT_NEEDED: 'standby',
+      },
+    },
+    standby: {
+      on: {
+        DISABLE: 'disabled',
+        FAILURE: 'error',
+        REQUEST_MICROPHONE: 'requestingMic',
       },
     },
   },

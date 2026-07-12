@@ -30,6 +30,21 @@ separate public-launch requirements are complete.
 4. Use **Reference**, **My recording**, and restart in the comparison tray. The
    tray becomes a compact floating dock after it scrolls out of view.
 
+After each completed attempt, the app stops every track in that attempt's
+microphone stream and leaves Practice Mode in a mic-off standby state. The
+completed recording remains available for comparison. When the reference
+resumes, the app stops learner playback and obtains a fresh stream before
+starting the video. If learner playback ends or pauses first, the app pre-arms
+that stream while all playback is stopped. Starting learner playback again
+releases it. This avoids both carrying a capture stream across iOS Safari's
+learner-playback audio-session switch and opening one after reference audio has
+already started.
+
+Some iOS Safari recordings of genuine silence finalise as a zero-byte MP4.
+The app treats that as an empty attempt rather than a microphone failure: it
+saves nothing, preserves the last playable recording, releases the stream, and
+keeps Practice Mode ready for another attempt.
+
 `Alt+C` switches between the ready reference and the latest matching recording
 when focus is outside an editable control. Playing either source stops the
 other. The full native audio control remains available in the **Latest

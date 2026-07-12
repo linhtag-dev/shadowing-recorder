@@ -49,6 +49,7 @@ const statusMessages: Record<RecorderState, string> = {
   finalising: 'Finishing your recording…',
   recording: 'Recording your microphone while the video plays.',
   requestingMic: 'Waiting for microphone permission…',
+  standby: 'Ready. Play the video to start recording.',
 }
 
 type PlaybackSource = 'recording' | 'reference'
@@ -236,6 +237,7 @@ export function RecorderSpike({
   const pendingComparisonPlayback = useRef(false)
   const playerBindingRef = useRef<RecorderPlayerBinding | null>(null)
   const playerRef = useRef<YouTubePlayerInstance | null>(null)
+  const referencePlaybackRequest = useRef(0)
   const selectedVideoRef = useRef<SelectedVideo | null>(null)
   const [activePlayback, setActivePlayback] =
     useState<PlaybackSource>('reference')
@@ -423,6 +425,15 @@ export function RecorderSpike({
         return
       }
 
+      if (state === 'playing') {
+        ++referencePlaybackRequest.current
+        pendingComparisonPlayback.current = false
+        stopAudio(audioRef.current)
+        setActivePlayback('reference')
+        setAudioIsPlaying(false)
+        setAudioProgress(emptyPlaybackProgress)
+      }
+
       const validation =
         state === 'playing'
           ? controller.playerPlaying(binding)
@@ -438,13 +449,6 @@ export function RecorderSpike({
       }
 
       setPlayerPlaybackState(validation.playbackState)
-      if (validation.playbackState === 'playing') {
-        pendingComparisonPlayback.current = false
-        stopAudio(audioRef.current)
-        setActivePlayback('reference')
-        setAudioIsPlaying(false)
-        setAudioProgress(emptyPlaybackProgress)
-      }
     },
     [controller, handlePlayerFailure],
   )
@@ -594,7 +598,9 @@ export function RecorderSpike({
   const referenceIsPlaying = ['buffering', 'playing'].includes(
     playerPlaybackState,
   )
-  const latestRecordingIsAvailable = snapshot.result !== null && !captureIsBusy
+  const latestRecordingIsAvailable =
+    snapshot.result !== null &&
+    !['buffering', 'finalising', 'recording'].includes(snapshot.state)
   const recordingIsAvailable =
     latestRecordingIsAvailable &&
     playerIsReady &&
@@ -650,10 +656,36 @@ export function RecorderSpike({
     }
     return validation.status === 'valid'
   }, [controller, handlePlayerFailure])
+  const prepareLearnerPlayback = useCallback(() => {
+    const binding = playerBindingRef.current
+    if (binding === null) {
+      return false
+    }
+
+    const validation = controller.prepareForLearnerPlayback(binding)
+    if (validation.status === 'invalid') {
+      handlePlayerFailure(binding.loadGeneration, validation.message)
+      return false
+    }
+    return validation.status === 'valid'
+  }, [controller, handlePlayerFailure])
+  const prepareReferencePlayback = useCallback(async () => {
+    const binding = playerBindingRef.current
+    if (binding === null) {
+      return false
+    }
+
+    const validation = await controller.prepareForReferencePlayback(binding)
+    if (validation.status === 'invalid') {
+      handlePlayerFailure(binding.loadGeneration, validation.message)
+      return false
+    }
+    return validation.status === 'valid'
+  }, [controller, handlePlayerFailure])
   const playLatestAttempt = () => {
     pendingComparisonPlayback.current = false
     if (playerIsReady) {
-      if (!validatePlayerAction()) {
+      if (!prepareLearnerPlayback()) {
         audioRef.current?.pause()
         return
       }
@@ -666,30 +698,40 @@ export function RecorderSpike({
   const pauseLatestAttempt = () => {
     setAudioIsPlaying(false)
     updateAudioProgress()
+    if (playerIsReady && !referenceIsPlaying) {
+      void prepareReferencePlayback()
+    }
   }
   const toggleReferencePlayback = () => {
     const player = playerRef.current
-    if (player === null || !validatePlayerAction()) {
+    if (player === null) {
       return
     }
 
     pendingComparisonPlayback.current = false
     setActivePlayback('reference')
     if (referenceIsPlaying) {
+      ++referencePlaybackRequest.current
       player.pauseVideo()
       return
     }
 
+    const request = ++referencePlaybackRequest.current
     stopAudio(audioRef.current)
     setAudioIsPlaying(false)
-    player.playVideo()
+    void prepareReferencePlayback().then((ready) => {
+      if (ready && request === referencePlaybackRequest.current) {
+        player.playVideo()
+      }
+    })
   }
   const toggleRecordingPlayback = () => {
     const audio = audioRef.current
-    if (audio === null || !recordingIsAvailable || !validatePlayerAction()) {
+    if (audio === null || !recordingIsAvailable || !prepareLearnerPlayback()) {
       return
     }
 
+    ++referencePlaybackRequest.current
     pendingComparisonPlayback.current = false
     setActivePlayback('recording')
     if (audioIsPlaying) {
@@ -706,10 +748,15 @@ export function RecorderSpike({
     pendingComparisonPlayback.current = false
     if (activePlayback === 'recording') {
       const audio = audioRef.current
-      if (audio === null || !recordingIsAvailable || !validatePlayerAction()) {
+      if (
+        audio === null ||
+        !recordingIsAvailable ||
+        !prepareLearnerPlayback()
+      ) {
         return
       }
 
+      ++referencePlaybackRequest.current
       playerRef.current?.pauseVideo()
       audio.currentTime = 0
       updateAudioProgress()
@@ -720,14 +767,19 @@ export function RecorderSpike({
     }
 
     const player = playerRef.current
-    if (player === null || !validatePlayerAction()) {
+    if (player === null) {
       return
     }
 
+    const request = ++referencePlaybackRequest.current
     stopAudio(audioRef.current)
     setAudioIsPlaying(false)
-    player.seekTo(0, true)
-    player.playVideo()
+    void prepareReferencePlayback().then((ready) => {
+      if (ready && request === referencePlaybackRequest.current) {
+        player.seekTo(0, true)
+        player.playVideo()
+      }
+    })
   }
 
   useEffect(() => {
@@ -781,7 +833,12 @@ export function RecorderSpike({
           ['buffering', 'finalising', 'recording'].includes(snapshot.state)
         player.pauseVideo()
 
-        if (audio !== null && recordingIsAvailable) {
+        if (
+          audio !== null &&
+          recordingIsAvailable &&
+          prepareLearnerPlayback()
+        ) {
+          ++referencePlaybackRequest.current
           void audio.play().catch(() => {
             setAudioIsPlaying(false)
           })
@@ -790,9 +847,14 @@ export function RecorderSpike({
       }
 
       pendingComparisonPlayback.current = false
+      const request = ++referencePlaybackRequest.current
       stopAudio(audioRef.current)
       setAudioIsPlaying(false)
-      player.playVideo()
+      void prepareReferencePlayback().then((ready) => {
+        if (ready && request === referencePlaybackRequest.current) {
+          player.playVideo()
+        }
+      })
     }
 
     document.addEventListener('keydown', handleComparisonShortcut)
@@ -802,6 +864,8 @@ export function RecorderSpike({
   }, [
     recordingIsAvailable,
     referenceIsPlaying,
+    prepareLearnerPlayback,
+    prepareReferencePlayback,
     snapshot.state,
     validatePlayerAction,
   ])
@@ -1032,7 +1096,7 @@ export function RecorderSpike({
             </button>
           </div>
 
-          {snapshot.result !== null && !captureIsBusy ? (
+          {snapshot.result !== null && latestRecordingIsAvailable ? (
             <div className={styles.playback}>
               <p className={styles.step}>Latest recording</p>
               <audio

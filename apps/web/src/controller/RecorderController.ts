@@ -127,6 +127,7 @@ export class RecorderController {
   #disposed = false
   #generation = 0
   #intentionalTrackShutdown = false
+  #microphoneRequest: Promise<void> | null = null
   #playerBinding: RecorderPlayerBinding | null = null
   #playerChangeShutdown: {
     promise: Promise<void>
@@ -223,7 +224,7 @@ export class RecorderController {
       return
     }
 
-    void this.#requestMicrophone(generation)
+    this.#microphoneRequest = this.#requestMicrophone(generation, false)
   }
 
   disable() {
@@ -276,6 +277,48 @@ export class RecorderController {
     }
 
     return validation
+  }
+
+  prepareForLearnerPlayback(binding: RecorderPlayerBinding) {
+    const validation = this.#validateCurrentPlayerBinding(binding)
+    if (validation.status !== 'valid') {
+      return validation
+    }
+
+    this.#playerState = this.#toControllerPlayerState(validation.playbackState)
+    if (this.#snapshot.state === 'armed') {
+      ++this.#generation
+      this.#intentionalTrackShutdown = true
+      this.#stopCurrentStream()
+      this.#publish({ microphoneSettings: null })
+      this.#actor.send({ type: 'RELEASE_MICROPHONE' })
+    } else if (this.#snapshot.state === 'requestingMic') {
+      ++this.#generation
+      this.#intentionalTrackShutdown = true
+      this.#actor.send({ type: 'MICROPHONE_NOT_NEEDED' })
+    }
+
+    return validation
+  }
+
+  async prepareForReferencePlayback(binding: RecorderPlayerBinding) {
+    const validation = this.#validateCurrentPlayerBinding(binding)
+    if (validation.status !== 'valid') {
+      return validation
+    }
+
+    this.#playerState = this.#toControllerPlayerState(validation.playbackState)
+    if (this.#practiceEnabled && this.#snapshot.state === 'standby') {
+      await this.#requestMicrophoneFromStandby(false)
+    } else if (
+      this.#practiceEnabled &&
+      this.#snapshot.state === 'requestingMic' &&
+      this.#microphoneRequest !== null
+    ) {
+      await this.#microphoneRequest
+    }
+
+    return this.#validateCurrentPlayerBinding(binding)
   }
 
   shutdownForPlayerChange(): Promise<void> {
@@ -334,6 +377,7 @@ export class RecorderController {
         'finalising',
         'recording',
         'requestingMic',
+        'standby',
       ].includes(this.#snapshot.state)
     ) {
       return
@@ -394,6 +438,8 @@ export class RecorderController {
         this.#startAttempt()
       } else if (this.#snapshot.state === 'buffering') {
         this.#resumeAttempt()
+      } else if (this.#snapshot.state === 'standby') {
+        void this.#requestMicrophoneFromStandby(true)
       }
       return validation
     }
@@ -507,7 +553,7 @@ export class RecorderController {
     shutdown.resolve()
   }
 
-  async #requestMicrophone(generation: number) {
+  async #requestMicrophone(generation: number, requirePlaying: boolean) {
     let stream: MicrophoneStream
 
     try {
@@ -544,6 +590,13 @@ export class RecorderController {
       bindingValidation.playbackState,
     )
 
+    if (requirePlaying && this.#playerState !== 'playing') {
+      this.#intentionalTrackShutdown = true
+      this.#stopStream(stream)
+      this.#actor.send({ type: 'MICROPHONE_NOT_NEEDED' })
+      return
+    }
+
     this.#stream = stream
     this.#intentionalTrackShutdown = false
     this.#watchTracks(stream, generation)
@@ -560,6 +613,23 @@ export class RecorderController {
     ) {
       this.#startAttempt()
     }
+  }
+
+  #requestMicrophoneFromStandby(requirePlaying: boolean) {
+    if (
+      this.#disposed ||
+      !this.#practiceEnabled ||
+      (requirePlaying && this.#playerState !== 'playing') ||
+      this.#snapshot.state !== 'standby'
+    ) {
+      return Promise.resolve()
+    }
+
+    const generation = ++this.#generation
+    this.#actor.send({ type: 'REQUEST_MICROPHONE' })
+    const request = this.#requestMicrophone(generation, requirePlaying)
+    this.#microphoneRequest = request
+    return request
   }
 
   #startAttempt() {
@@ -804,9 +874,13 @@ export class RecorderController {
     )
 
     if (blob.size === 0) {
-      this.#fail(
-        'The recorder returned no audio. Check the selected microphone and try again.',
-      )
+      this.#releaseActiveAttempt(false)
+      this.#publish({
+        errorMessage:
+          'This silent attempt produced no playable audio, so nothing was saved. You can continue or try again.',
+        recordedByteCount: 0,
+      })
+      this.#leaveFinalisation()
       return
     }
 
@@ -838,6 +912,10 @@ export class RecorderController {
       result: completedRecording,
     })
 
+    this.#leaveFinalisation()
+  }
+
+  #leaveFinalisation() {
     if (!this.#practiceEnabled || this.#disableAfterFinalisation) {
       this.#disableAfterFinalisation = false
       ++this.#generation
@@ -848,9 +926,13 @@ export class RecorderController {
       return
     }
 
+    ++this.#generation
+    this.#intentionalTrackShutdown = true
+    this.#stopCurrentStream()
+    this.#publish({ microphoneSettings: null })
     this.#actor.send({ type: 'FINALISED' })
     if (this.#playerState === 'playing') {
-      this.#startAttempt()
+      void this.#requestMicrophoneFromStandby(true)
     }
   }
 
