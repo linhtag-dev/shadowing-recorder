@@ -17,6 +17,10 @@ The canonical production origin is:
 https://shadowing-recorder.htag.uk
 ```
 
+## Audit history
+
+- [2026-07-12 initial production setup and deployment](audits/2026-07-12-cloudflare-production.md)
+
 The initial site is publicly reachable but remains pre-launch and carries
 `noindex` crawler guidance. That guidance is not access control. Do not remove
 the `_headers` no-index rule or `robots.txt` disallow rule during rollout.

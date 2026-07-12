@@ -41,8 +41,11 @@ Status: Complete. The fixed-video recorder implementation, synthetic automated b
 
 ## Static production deployment checkpoint
 
-Status: Deployment-readiness implementation complete on 2026-07-12; first
-production deployment and smoke evidence pending.
+Status: Deployment-readiness implementation and the first production deployment
+completed on 2026-07-12. Automated production routing, header, caching, and
+dashboard evidence is recorded below; current-build real-device microphone,
+YouTube, and request-boundary smoke evidence plus resolution of the Cloudflare
+NEL telemetry anomaly remain pending.
 
 Cloudflare Workers Static Assets is selected for the canonical
 `https://shadowing-recorder.htag.uk` origin. The retained repository contains
@@ -66,10 +69,65 @@ branch builds disabled, `SKIP_DEPENDENCY_INSTALL=1`, the pinned npm install/chec
 command, and the checked-in Wrangler deploy command. No runtime variable or
 secret is configured. GitHub verification must be required before merge.
 
-Operational completion still requires the first deployment plus recorded
-DNS/TLS, SPA, header, microphone, playback, exact iframe origin, Referer/error
-153, request-boundary, Web Analytics, and Workers-observability checks. A local
-dry run does not satisfy that evidence requirement.
+The first production deployment used commit
+`12240d0dd7c194bd931f24f8dc273330117771ef`, Cloudflare Workers Build
+`1255e7f2-387d-4f6a-9e4d-88656be1d5bc`, and deployed version
+`15654a15-1e2f-4178-b8e2-8effa861ceb8`. The exact commit's GitHub `verify` job
+passed. The sanitized
+[initial production audit](../release/audits/2026-07-12-cloudflare-production.md)
+records the setup and smoke history. Cloudflare detected Node.js 24.18.0 and npm
+11.16.0, ran the pinned clean install and full check, passed 80 Vitest tests,
+produced the static artifact, reported no bindings in the Wrangler dry run, and
+completed the checked-in deploy command.
+
+Production checks on 2026-07-12 confirmed public DNS and valid HTTPS at the
+canonical hostname, a static root response, `200` SPA fallback with the
+application 404 for an unknown path, the crawler disallow file, the required
+security and no-index headers, immutable caching on a current fingerprinted
+asset, and no health payload at `/api/health`. The Cloudflare dashboard showed
+one custom domain, zero Workers, zero bindings, no runtime variable or secret,
+disabled Workers logs and traces, disabled `workers.dev` and previews, build
+cache enabled, production branch `main`, and non-production builds disabled.
+Cloudflare Web Analytics has no site entry or injected RUM beacon for
+`shadowing-recorder.htag.uk`; the existing, separately owned `htag.uk` hostname
+entry was not changed.
+
+A read-only Cloudflare API and public HTTPS recheck on 2026-07-12 confirmed that
+the recorded version remained active at 100 percent traffic, the build outcome
+remained successful, the custom domain and production-only trigger remained in
+place, and bindings, secrets, logpush, tail consumers, `workers.dev`, and
+preview URLs remained absent or disabled. GitHub Actions run `29180690383`
+independently identified the recorded commit and successful `verify` job. The
+deployed HTML, JavaScript, and CSS were byte-for-byte identical to the local
+production artifact, and the SPA, API, header, crawler, caching, and injected
+application-telemetry checks passed again. The evidence working tree also
+passed `npm run check` with 80 Vitest tests and an assets-only Wrangler dry run,
+then all 15 Playwright checks in Chromium, Firefox, and WebKit. See the linked
+production audit for the sanitized details and the Cloudflare build-metadata
+caveat.
+
+The recheck also confirmed that Cloudflare still adds platform-managed `NEL`
+and `Report-To` response headers. Cloudflare documents NEL as browser-based
+reporting to an external endpoint and exposes a zone setting to disable it. This
+is an open anomaly against ADR 0005's no-telemetry contract. Operational
+completion requires disabling NEL and verifying header and browser-request
+absence, or an explicit architecture and privacy decision accepting that
+provider data flow.
+
+GitHub branch protection is not enforceable for this private repository on the
+current organization plan: both repository rulesets and classic branch
+protection report that enforcement requires GitHub Team or Enterprise. On
+2026-07-12 the operator explicitly accepted this as a release limitation for
+the non-public validation deployment. Until the plan changes, the maintainer
+owns the procedural control: release only the exact `main` commit whose hosted
+`verify` job passed, and do not make unverified direct pushes. Revisit enforced
+branch protection before public launch; this accepted limitation does not
+satisfy the runbook's branch-protection release boundary.
+
+Operational completion still requires recorded current-build microphone,
+playback, exact iframe origin, Referer/error 153, browser/device,
+request-boundary, and lifecycle-shutdown smoke evidence, plus resolution and
+retest of the NEL anomaly. The production checkpoint therefore remains open.
 
 ## Stage 2: Public embed and policy foundation
 
