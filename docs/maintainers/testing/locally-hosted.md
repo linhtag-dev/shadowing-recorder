@@ -121,3 +121,17 @@ without query strings. Confirm:
 Return the sanitized browser/device and network results to the
 [Cloudflare rollout runbook](../release/cloudflare-rollout.md) for dashboard
 verification, evidence completion, and any rollback decision.
+
+
+## Listen first mode check
+
+Select Listen first, enable Practice Mode, and advance with Space and Right
+Arrow through reference, record, and reflection. Confirm no microphone indicator
+while either source plays, audible learner output, reference paused throughout
+capture, and a fresh microphone stream on each of three rounds. Let each source
+end and verify that recording never starts without an explicit advance. Replay
+the passage, select New passage, and repeat after seeking. Exercise permission
+denial, an empty attempt, mode switching during capture, hiding the page, and
+video replacement. Check playback retry after asynchronous finalisation on
+physical iOS Safari. Record only sanitized observations; do not retain learner
+audio or externally selected video details in repository evidence.

@@ -12,7 +12,9 @@ import { createBrowserRecorderDependencies } from '../controller/browserCapabili
 import {
   RecorderController,
   type RecorderPlayerBinding,
+  type PracticeMode,
 } from '../controller/RecorderController.js'
+import { ListenFirstController } from '../controller/ListenFirstController.js'
 import type { RecorderState } from '../controller/recorderMachine.js'
 import type {
   YouTubePlaybackState,
@@ -259,15 +261,33 @@ export function RecorderSpike({
     status: 'empty',
   })
   const [videoUrl, setVideoUrl] = useState('')
+  const [recorderDependencies] = useState(
+    () => dependencies ?? createBrowserRecorderDependencies(),
+  )
+  const [modeChanging, setModeChanging] = useState(false)
   const [controller] = useState(
-    () =>
-      new RecorderController(
-        dependencies ?? createBrowserRecorderDependencies(),
-      ),
+    () => new RecorderController(recorderDependencies),
   )
   const snapshot = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
+  )
+
+  const [listenFlow] = useState(
+    () => new ListenFirstController(controller, recorderDependencies.clock),
+  )
+  const listenSnapshot = useSyncExternalStore(
+    listenFlow.subscribe,
+    listenFlow.getSnapshot,
+  )
+  const listenFirst = snapshot.mode === 'listen-first'
+  useEffect(() => listenFlow.connect(), [listenFlow])
+  const setAudioElement = useCallback(
+    (audio: HTMLAudioElement | null) => {
+      audioRef.current = audio
+      listenFlow.setAudio(audio)
+    },
+    [listenFlow],
   )
 
   useEffect(() => {
@@ -295,9 +315,32 @@ export function RecorderSpike({
       }
     })
 
+    // A large scroll can move the tray from below to above the viewport
+    // without crossing an observer threshold. Measure those jumps as well.
+    let frame: number | null = null
+    const measureAfterScroll = () => {
+      if (frame !== null) return
+      frame = window.requestAnimationFrame(() => {
+        frame = null
+        setComparisonTrayHasPassed(
+          comparisonTray.getBoundingClientRect().bottom <= 0,
+        )
+        const boundary = dockBoundary.getBoundingClientRect()
+        setDockBoundaryIsVisible(
+          boundary.top <= window.innerHeight && boundary.bottom >= 0,
+        )
+      })
+    }
     observer.observe(comparisonTray)
     observer.observe(dockBoundary)
-    return () => observer.disconnect()
+    window.addEventListener('scroll', measureAfterScroll, { passive: true })
+    window.addEventListener('resize', measureAfterScroll)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', measureAfterScroll)
+      window.removeEventListener('resize', measureAfterScroll)
+      if (frame !== null) window.cancelAnimationFrame(frame)
+    }
   }, [])
 
   const updateReferenceProgress = useCallback(() => {
@@ -356,6 +399,8 @@ export function RecorderSpike({
     const generation = ++lifecycleState.generation
     const interruptForHiddenPage = () => {
       if (document.visibilityState === 'hidden') {
+        listenFlow.stop()
+        stopAudio(audioRef.current)
         playerRef.current?.pauseVideo()
         controller.interrupt(
           'Practice Mode stopped because the page was hidden. Return to this page and try again.',
@@ -363,6 +408,8 @@ export function RecorderSpike({
       }
     }
     const interruptForExit = () => {
+      listenFlow.stop()
+      stopAudio(audioRef.current)
       playerRef.current?.pauseVideo()
       controller.interrupt(
         'Practice Mode stopped because the page was exited. Return to this page and try again.',
@@ -383,11 +430,12 @@ export function RecorderSpike({
 
       queueMicrotask(() => {
         if (lifecycleState.generation === generation) {
+          listenFlow.dispose()
           controller.dispose()
         }
       })
     }
-  }, [controller])
+  }, [controller, listenFlow])
 
   const handlePlayerFailure = useCallback(
     (generation: number, message: string) => {
@@ -400,6 +448,7 @@ export function RecorderSpike({
       } catch {
         // Player teardown below remains the fail-safe.
       }
+      listenFlow.stop()
       stopAudio(audioRef.current)
       pendingComparisonPlayback.current = false
       playerBindingRef.current = null
@@ -413,7 +462,7 @@ export function RecorderSpike({
       setVideoLoadState({ status: 'error', message })
       void controller.shutdownForPlayerChange()
     },
-    [controller],
+    [controller, listenFlow],
   )
 
   const handlePlaybackStateChange = useCallback(
@@ -450,9 +499,10 @@ export function RecorderSpike({
         return
       }
 
+      listenFlow.playerStateChanged(validation.playbackState)
       setPlayerPlaybackState(validation.playbackState)
     },
-    [controller, handlePlayerFailure],
+    [controller, handlePlayerFailure, listenFlow],
   )
   const handlePlayerError = useCallback(
     (error: YouTubePlayerError, generation: number) => {
@@ -493,12 +543,13 @@ export function RecorderSpike({
 
       playerBindingRef.current = binding
       playerRef.current = player
+      listenFlow.bindPlayer(player, binding)
       setPlayerIsReady(true)
       setPlayerPlaybackState(validation.playbackState)
       setVideoLoadState({ status: 'ready', videoId: selection.videoId })
       updateReferenceProgress()
     },
-    [controller, handlePlayerFailure, updateReferenceProgress],
+    [controller, handlePlayerFailure, updateReferenceProgress, listenFlow],
   )
 
   useEffect(() => {
@@ -514,6 +565,7 @@ export function RecorderSpike({
 
   const submitVideoUrl = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    listenFlow.stop()
     const generation = ++loadGeneration.current
     const parsedUrl = parseYouTubeVideoUrl(videoUrl)
 
@@ -590,13 +642,26 @@ export function RecorderSpike({
       : practiceModeIsEnabled
         ? 'Practice Mode is ready'
         : 'Turn on Practice Mode to record and compare'
-  const practiceGateDescription = practiceModeIsEnabled
-    ? 'Play the video to record. Headphones keep the reference audio out of your recording.'
-    : playerIsReady
-      ? 'Your microphone records only while the video plays. Headphones are recommended.'
-      : 'Load a video first. Your microphone will record only while it plays.'
-  const errorMessage = snapshot.errorMessage
-  const visibleStatus = errorMessage ?? statusMessages[snapshot.state]
+  const practiceGateDescription = listenFirst
+    ? 'Listen to the reference, record your attempt, then listen back. Space or Right Arrow advances each step.'
+    : practiceModeIsEnabled
+      ? 'Play the video to record. Headphones keep the reference audio out of your recording.'
+      : playerIsReady
+        ? 'Your microphone records only while the video plays. Headphones are recommended.'
+        : 'Load a video first. Your microphone will record only while it plays.'
+  const errorMessage =
+    snapshot.errorMessage ?? (listenFirst ? listenSnapshot.message : null)
+  const visibleStatus =
+    errorMessage ??
+    (listenFirst && practiceModeIsEnabled
+      ? snapshot.state === 'recording'
+        ? 'Recording your attempt. The reference is paused.'
+        : snapshot.state === 'finalising' || snapshot.state === 'requestingMic'
+          ? statusMessages[snapshot.state]
+          : listenSnapshot.phase === 'listen'
+            ? 'Listen to your attempt and reflect. Advance when you are ready.'
+            : 'Listen first. Your microphone stays off until you start recording.'
+      : statusMessages[snapshot.state])
   const referenceIsPlaying = ['buffering', 'playing'].includes(
     playerPlaybackState,
   )
@@ -633,13 +698,32 @@ export function RecorderSpike({
     comparisonSessionIsUseful
 
   const enablePracticeMode = () => {
+    listenFlow.stop()
     stopAudio(audioRef.current)
     setAudioIsPlaying(false)
     controller.enable()
   }
+  const disablePracticeMode = () => {
+    listenFlow.stop()
+    if (listenFirst) {
+      playerRef.current?.pauseVideo()
+      stopAudio(audioRef.current)
+    }
+    controller.disable()
+  }
+  const changePracticeMode = (mode: PracticeMode) => {
+    listenFlow.stop()
+    ++referencePlaybackRequest.current
+    pendingComparisonPlayback.current = false
+    stopAudio(audioRef.current)
+    playerRef.current?.pauseVideo()
+    setAudioIsPlaying(false)
+    setModeChanging(true)
+    void controller.changeMode(mode).then(() => setModeChanging(false))
+  }
   const togglePracticeMode = () => {
     if (practiceModeIsEnabled) {
-      controller.disable()
+      disablePracticeMode()
       return
     }
 
@@ -685,6 +769,17 @@ export function RecorderSpike({
     return validation.status === 'valid'
   }, [controller, handlePlayerFailure])
   const playLatestAttempt = () => {
+    // play events are queued; a source switch may already have paused this audio.
+    if (listenFirst && audioRef.current?.paused !== false) return
+    if (
+      listenFirst &&
+      ['recording', 'finalising', 'requestingMic'].includes(
+        controller.getSnapshot().state,
+      )
+    ) {
+      stopAudio(audioRef.current)
+      return
+    }
     pendingComparisonPlayback.current = false
     if (playerIsReady) {
       if (!prepareLearnerPlayback()) {
@@ -693,6 +788,7 @@ export function RecorderSpike({
       }
       playerRef.current?.pauseVideo()
     }
+    if (listenFirst) listenFlow.learnerPlaybackStarted()
     setActivePlayback('recording')
     setAudioIsPlaying(true)
     updateAudioProgress()
@@ -814,11 +910,23 @@ export function RecorderSpike({
           event.key !== ' ' &&
           event.code !== 'ArrowRight' &&
           event.key !== 'ArrowRight') ||
-        isInteractiveShortcutTarget(event.target)
+        (isInteractiveShortcutTarget(event.target) &&
+          !(
+            listenFirst &&
+            event.target instanceof HTMLElement &&
+            event.target.closest('[data-practice-advance]')
+          ))
       ) {
         return
       }
 
+      if (modeChanging) return
+      if (listenFirst) {
+        if (!practiceModeIsEnabled) return
+        event.preventDefault()
+        void listenFlow.advance()
+        return
+      }
       const player = playerRef.current
       if (player === null || !validatePlayerAction()) {
         return
@@ -868,6 +976,10 @@ export function RecorderSpike({
       document.removeEventListener('keydown', handleComparisonShortcut)
     }
   }, [
+    listenFirst,
+    listenFlow,
+    practiceModeIsEnabled,
+    modeChanging,
     recordingIsAvailable,
     referenceIsPlaying,
     prepareLearnerPlayback,
@@ -876,15 +988,73 @@ export function RecorderSpike({
     validatePlayerAction,
   ])
 
+  const advanceLabel = listenSnapshot.busy
+    ? snapshot.state === 'finalising'
+      ? 'Finishing recording…'
+      : 'Preparing…'
+    : listenSnapshot.phase === 'listen'
+      ? listenSnapshot.needsPlayback
+        ? 'Play my attempt'
+        : 'Play reference'
+      : listenSnapshot.phase === 'record'
+        ? snapshot.state === 'recording'
+          ? 'Stop & listen'
+          : 'Retry recording'
+        : listenSnapshot.started
+          ? 'Start recording'
+          : 'Play reference'
+  const listenControls = (
+    <div className={styles.listenControls}>
+      <ol className={styles.practiceSteps} aria-label="Listen first steps">
+        {(['reference', 'record', 'listen'] as const).map((phase, index) => (
+          <li
+            key={phase}
+            aria-current={listenSnapshot.phase === phase ? 'step' : undefined}
+          >
+            <span>{index + 1}</span>
+            {phase === 'reference'
+              ? 'Play reference'
+              : phase === 'record'
+                ? 'Record'
+                : 'Listen'}
+          </li>
+        ))}
+      </ol>
+      <button
+        type="button"
+        data-practice-advance="true"
+        aria-keyshortcuts="Space ArrowRight"
+        className={styles.advanceButton}
+        disabled={!practiceModeIsEnabled || modeChanging}
+        aria-disabled={listenSnapshot.busy || snapshot.state === 'finalising'}
+        onClick={() => {
+          void listenFlow.advance()
+        }}
+      >
+        {advanceLabel}
+        <span aria-hidden="true"> →</span>
+      </button>
+      <button
+        className={styles.newPassageButton}
+        type="button"
+        disabled={listenSnapshot.busy || snapshot.state !== 'standby'}
+        onClick={() => listenFlow.newPassage()}
+      >
+        New passage
+      </button>
+    </div>
+  )
+
   return (
     <main id="main-content" className={styles.main}>
       <section className={styles.introduction} aria-labelledby="spike-title">
         <p className={styles.kicker}>Stage 2 · URL-first practice loader</p>
         <h1 id="spike-title">Listen. Shadow. Play it back.</h1>
         <p>
-          Load a supported YouTube URL, enable Practice Mode, then use the
-          video&apos;s native controls. Playing starts microphone recording;
-          pausing or ending the video finishes the attempt.
+          Load a supported YouTube URL and choose how to practice. In Shadowing,
+          the video&apos;s native controls guide recording. Playing starts
+          microphone recording; pausing or ending the video finishes the
+          attempt.
         </p>
       </section>
 
@@ -894,6 +1064,27 @@ export function RecorderSpike({
             <p className={styles.step}>Practice video</p>
             <h2 id="video-title">Set up your practice video</h2>
           </div>
+        </div>
+        <div className={styles.modePicker}>
+          <label htmlFor="practice-mode">Practice style</label>
+          <select
+            id="practice-mode"
+            value={snapshot.mode}
+            disabled={modeChanging}
+            onChange={(event) =>
+              changePracticeMode(event.target.value as PracticeMode)
+            }
+          >
+            <option value="shadowing">Shadowing · speak along</option>
+            <option value="listen-first">
+              Listen first · record · reflect
+            </option>
+          </select>
+          <span>
+            {listenFirst
+              ? 'Hear it first. Try it yourself. Listen back.'
+              : 'Record while the reference plays.'}
+          </span>
         </div>
         <div className={styles.videoSetup}>
           <form className={styles.videoLoader} onSubmit={submitVideoUrl}>
@@ -967,7 +1158,9 @@ export function RecorderSpike({
               aria-pressed={practiceModeIsEnabled}
               className={styles.practiceControl}
               data-active={practiceModeIsEnabled ? 'true' : 'false'}
-              disabled={!playerIsReady && !practiceModeIsEnabled}
+              disabled={
+                modeChanging || (!playerIsReady && !practiceModeIsEnabled)
+              }
               onClick={togglePracticeMode}
               type="button"
             >
@@ -1014,21 +1207,30 @@ export function RecorderSpike({
           ref={comparisonTrayRef}
         >
           <div className={styles.comparisonTrayHeading}>
-            <p>Compare playback · Space / → to cycle</p>
-            <span aria-live="polite">{comparisonStatus}</span>
+            <p>
+              {listenFirst ? 'Listen first' : 'Compare playback'} · Space / → to
+              cycle
+            </p>
+            <span aria-live="polite">
+              {listenFirst ? visibleStatus : comparisonStatus}
+            </span>
           </div>
-          <ComparisonControls
-            activePlayback={activePlayback}
-            audioIsPlaying={audioIsPlaying}
-            audioProgress={audioProgress}
-            onRestart={restartActivePlayback}
-            onToggleRecording={toggleRecordingPlayback}
-            onToggleReference={toggleReferencePlayback}
-            playerIsReady={playerIsReady}
-            recordingIsAvailable={recordingIsAvailable}
-            referenceIsPlaying={referenceIsPlaying}
-            referenceProgress={referenceProgress}
-          />
+          {listenFirst ? (
+            listenControls
+          ) : (
+            <ComparisonControls
+              activePlayback={activePlayback}
+              audioIsPlaying={audioIsPlaying}
+              audioProgress={audioProgress}
+              onRestart={restartActivePlayback}
+              onToggleRecording={toggleRecordingPlayback}
+              onToggleReference={toggleReferencePlayback}
+              playerIsReady={playerIsReady && !modeChanging}
+              recordingIsAvailable={recordingIsAvailable && !modeChanging}
+              referenceIsPlaying={referenceIsPlaying}
+              referenceProgress={referenceProgress}
+            />
+          )}
         </section>
       </section>
 
@@ -1040,20 +1242,24 @@ export function RecorderSpike({
           data-comparison-tray="floating"
         >
           <span className={styles.visuallyHidden} aria-live="polite">
-            {comparisonStatus}
+            {listenFirst ? visibleStatus : comparisonStatus}
           </span>
-          <ComparisonControls
-            activePlayback={activePlayback}
-            audioIsPlaying={audioIsPlaying}
-            audioProgress={audioProgress}
-            onRestart={restartActivePlayback}
-            onToggleRecording={toggleRecordingPlayback}
-            onToggleReference={toggleReferencePlayback}
-            playerIsReady={playerIsReady}
-            recordingIsAvailable={recordingIsAvailable}
-            referenceIsPlaying={referenceIsPlaying}
-            referenceProgress={referenceProgress}
-          />
+          {listenFirst ? (
+            listenControls
+          ) : (
+            <ComparisonControls
+              activePlayback={activePlayback}
+              audioIsPlaying={audioIsPlaying}
+              audioProgress={audioProgress}
+              onRestart={restartActivePlayback}
+              onToggleRecording={toggleRecordingPlayback}
+              onToggleReference={toggleReferencePlayback}
+              playerIsReady={playerIsReady && !modeChanging}
+              recordingIsAvailable={recordingIsAvailable && !modeChanging}
+              referenceIsPlaying={referenceIsPlaying}
+              referenceProgress={referenceProgress}
+            />
+          )}
         </section>
       ) : null}
 
@@ -1087,7 +1293,7 @@ export function RecorderSpike({
           <div className={styles.controls} aria-label="Practice Mode controls">
             <button
               className={styles.primaryButton}
-              disabled={!canEnable}
+              disabled={!canEnable || modeChanging}
               onClick={enablePracticeMode}
               type="button"
             >
@@ -1095,15 +1301,19 @@ export function RecorderSpike({
             </button>
             <button
               disabled={!canDisable}
-              onClick={() => controller.disable()}
+              onClick={disablePracticeMode}
               type="button"
             >
               Disable Practice Mode
             </button>
           </div>
 
-          {snapshot.result !== null && latestRecordingIsAvailable ? (
-            <div className={styles.playback}>
+          {listenFirst ||
+          (snapshot.result !== null && latestRecordingIsAvailable) ? (
+            <div
+              className={styles.playback}
+              hidden={snapshot.result === null || !latestRecordingIsAvailable}
+            >
               <p className={styles.step}>Latest recording</p>
               <audio
                 aria-label="Latest recording playback"
@@ -1115,11 +1325,11 @@ export function RecorderSpike({
                 onPlay={playLatestAttempt}
                 onTimeUpdate={updateAudioProgress}
                 preload="metadata"
-                ref={audioRef}
-                src={snapshot.result.objectUrl}
+                ref={setAudioElement}
+                src={snapshot.result?.objectUrl}
               />
               <p>
-                Source video ID: <strong>{snapshot.result.videoId}</strong>.
+                Source video ID: <strong>{snapshot.result?.videoId}</strong>.
                 This session-only audio stays in your browser. The next
                 completed attempt replaces it.
               </p>

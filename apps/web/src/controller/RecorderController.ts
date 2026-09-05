@@ -21,6 +21,8 @@ import { recorderMachine, type RecorderState } from './recorderMachine.js'
 const finalisationWatchdogMilliseconds = 5_000
 const recordingTimesliceMilliseconds = 1_000
 
+export type PracticeMode = 'shadowing' | 'listen-first'
+
 type PlayerPlaybackState = 'buffering' | 'playing' | 'stopped'
 
 export interface CompletedRecording {
@@ -56,6 +58,7 @@ export interface PlayerBindingError {
 }
 
 export interface RecorderControllerSnapshot {
+  mode: PracticeMode
   errorMessage: string | null
   eventOrder: readonly string[]
   microphoneSettings: AppliedMicrophoneSettings | null
@@ -121,6 +124,8 @@ export class RecorderController {
   readonly #actor = createActor(recorderMachine)
   readonly #dependencies: RecorderDependencies
   readonly #listeners = new Set<() => void>()
+  readonly #finalisationWaiters = new Set<() => void>()
+  #modeChangeGeneration = 0
   #activeAttempt: ActiveAttempt | null = null
   #cleanupTrackListeners: Array<() => void> = []
   #disableAfterFinalisation = false
@@ -136,6 +141,7 @@ export class RecorderController {
   #playerState: PlayerPlaybackState = 'stopped'
   #practiceEnabled = false
   #snapshot: RecorderControllerSnapshot = {
+    mode: 'shadowing',
     errorMessage: null,
     eventOrder: [],
     microphoneSettings: null,
@@ -184,6 +190,39 @@ export class RecorderController {
     return validation
   }
 
+  async changeMode(mode: PracticeMode) {
+    const request = ++this.#modeChangeGeneration
+    await this.disableAndWait()
+    if (!this.#disposed && request === this.#modeChangeGeneration)
+      this.#publish({ mode })
+  }
+
+  disableAndWait(): Promise<void> {
+    this.disable()
+    return this.#waitForFinalisation()
+  }
+
+  #waitForFinalisation(): Promise<void> {
+    if (this.#disposed || this.#snapshot.state !== 'finalising')
+      return Promise.resolve()
+    return new Promise((resolve) => this.#finalisationWaiters.add(resolve))
+  }
+
+  async startIndependentRecording(binding: RecorderPlayerBinding) {
+    if (this.#snapshot.mode !== 'listen-first' || !this.#practiceEnabled) return
+    const validation = this.validatePlaybackAction(binding)
+    if (validation.status !== 'valid' || this.#playerState !== 'stopped') return
+    await this.#requestMicrophoneFromStandby(false)
+  }
+
+  async finishIndependentRecording() {
+    if (this.#snapshot.mode !== 'listen-first') return null
+    const previous = this.#snapshot.result
+    this.#requestFinalisation()
+    await this.#waitForFinalisation()
+    return this.#snapshot.result !== previous ? this.#snapshot.result : null
+  }
+
   enable() {
     if (
       this.#disposed ||
@@ -208,6 +247,10 @@ export class RecorderController {
     this.#practiceEnabled = true
     this.#disableAfterFinalisation = false
     this.#publish({ errorMessage: null, microphoneSettings: null })
+    if (this.#snapshot.mode === 'listen-first') {
+      this.#actor.send({ type: 'ENABLE_MANUAL' })
+      return
+    }
     this.#actor.send({ type: 'ENABLE' })
 
     if (!this.#dependencies.microphone.isAvailable()) {
@@ -308,6 +351,19 @@ export class RecorderController {
     }
 
     this.#playerState = this.#toControllerPlayerState(validation.playbackState)
+    if (this.#snapshot.mode === 'listen-first') return validation
+    if (this.#snapshot.state === 'finalising') {
+      const modeChangeGeneration = this.#modeChangeGeneration
+      await this.#waitForFinalisation()
+      if (
+        !this.#practiceEnabled ||
+        modeChangeGeneration !== this.#modeChangeGeneration
+      ) {
+        return { status: 'stale' } as const
+      }
+      const current = this.#validateCurrentPlayerBinding(binding)
+      if (current.status !== 'valid') return current
+    }
     if (this.#practiceEnabled && this.#snapshot.state === 'standby') {
       await this.#requestMicrophoneFromStandby(false)
     } else if (
@@ -412,6 +468,8 @@ export class RecorderController {
     this.#stopCurrentStream()
     this.discardCompletedRecording()
     this.#actor.stop()
+    for (const resolve of this.#finalisationWaiters) resolve()
+    this.#finalisationWaiters.clear()
     this.#listeners.clear()
     const shutdown = this.#playerChangeShutdown
     this.#playerChangeShutdown = null
@@ -430,6 +488,16 @@ export class RecorderController {
     this.#playerState = playerState
 
     if (!this.#practiceEnabled) {
+      return validation
+    }
+
+    if (this.#snapshot.mode === 'listen-first') {
+      if (playerState !== 'stopped') {
+        if (this.#snapshot.state === 'recording') this.#requestFinalisation()
+        if (['armed', 'requestingMic'].includes(this.#snapshot.state)) {
+          this.prepareForLearnerPlayback(binding)
+        }
+      }
       return validation
     }
 
@@ -496,10 +564,16 @@ export class RecorderController {
       }
     }
 
-    return {
-      status: 'valid',
-      playbackState: parseYouTubePlaybackState(state) ?? 'unstarted',
+    const playbackState = parseYouTubePlaybackState(state)
+    if (playbackState === null) {
+      return {
+        status: 'invalid',
+        message:
+          'The YouTube player returned an unrecognised playback state. The player was removed; load the video again.',
+      }
     }
+
+    return { status: 'valid', playbackState }
   }
 
   #validateCurrentPlayerBinding(
@@ -590,7 +664,11 @@ export class RecorderController {
       bindingValidation.playbackState,
     )
 
-    if (requirePlaying && this.#playerState !== 'playing') {
+    if (
+      (requirePlaying && this.#playerState !== 'playing') ||
+      (this.#snapshot.mode === 'listen-first' &&
+        this.#playerState !== 'stopped')
+    ) {
       this.#intentionalTrackShutdown = true
       this.#stopStream(stream)
       this.#actor.send({ type: 'MICROPHONE_NOT_NEEDED' })
@@ -609,9 +687,18 @@ export class RecorderController {
       this.#practiceEnabled &&
       generation === this.#generation &&
       this.getSnapshot().state === 'armed' &&
-      this.#playerState === 'playing'
+      (this.#snapshot.mode === 'listen-first' ||
+        this.#playerState === 'playing')
     ) {
       this.#startAttempt()
+      // A last-moment reference resume must not leave a manual stream armed.
+      if (
+        this.#snapshot.mode === 'listen-first' &&
+        this.getSnapshot().state === 'armed' &&
+        binding !== null
+      ) {
+        this.prepareForLearnerPlayback(binding)
+      }
     }
   }
 
@@ -625,6 +712,15 @@ export class RecorderController {
       return Promise.resolve()
     }
 
+    if (
+      !this.#dependencies.microphone.isAvailable() ||
+      !this.#dependencies.recorders.isAvailable()
+    ) {
+      this.#fail(
+        'This browser cannot record microphone audio. Use a supported browser and try again.',
+      )
+      return Promise.resolve()
+    }
     const generation = ++this.#generation
     this.#actor.send({ type: 'REQUEST_MICROPHONE' })
     const request = this.#requestMicrophone(generation, requirePlaying)
@@ -639,7 +735,8 @@ export class RecorderController {
     if (
       this.#disposed ||
       !this.#practiceEnabled ||
-      this.#playerState !== 'playing' ||
+      this.#playerState !==
+        (this.#snapshot.mode === 'listen-first' ? 'stopped' : 'playing') ||
       this.#snapshot.state !== 'armed' ||
       stream === null ||
       binding === null
@@ -650,7 +747,9 @@ export class RecorderController {
     const bindingValidation = this.#validateCurrentPlayerBinding(binding)
     if (
       bindingValidation.status !== 'valid' ||
-      bindingValidation.playbackState !== 'playing'
+      (this.#snapshot.mode === 'listen-first'
+        ? ['playing', 'buffering'].includes(bindingValidation.playbackState)
+        : bindingValidation.playbackState !== 'playing')
     ) {
       return
     }
@@ -685,7 +784,7 @@ export class RecorderController {
       recordedByteCount: 0,
       recorderMimeType: readRecorderMimeType(recorder, selectedMimeType),
     })
-    this.#actor.send({ type: 'PLAYER_PLAYING' })
+    this.#actor.send({ type: 'START_RECORDING' })
 
     try {
       recorder.start(recordingTimesliceMilliseconds)
@@ -817,6 +916,12 @@ export class RecorderController {
         }
 
         if (type === 'stop') {
+          if (!attempt.finalisationRequested) {
+            this.#fail(
+              'Recording stopped unexpectedly. The microphone has been stopped; try again.',
+            )
+            return
+          }
           this.#completeFinalisation(attempt)
         }
       })
@@ -931,7 +1036,10 @@ export class RecorderController {
     this.#stopCurrentStream()
     this.#publish({ microphoneSettings: null })
     this.#actor.send({ type: 'FINALISED' })
-    if (this.#playerState === 'playing') {
+    if (
+      this.#snapshot.mode === 'shadowing' &&
+      this.#playerState === 'playing'
+    ) {
       void this.#requestMicrophoneFromStandby(true)
     }
   }
@@ -1035,6 +1143,10 @@ export class RecorderController {
 
   #publish(changes: Partial<RecorderControllerSnapshot>) {
     this.#snapshot = { ...this.#snapshot, ...changes }
+    if (this.#disposed || this.#snapshot.state !== 'finalising') {
+      for (const resolve of this.#finalisationWaiters) resolve()
+      this.#finalisationWaiters.clear()
+    }
     for (const listener of this.#listeners) {
       listener()
     }

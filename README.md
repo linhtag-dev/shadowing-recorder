@@ -2,8 +2,9 @@
 
 Shadowing Recorder is a browser-first language-practice tool. The current
 pre-launch build accepts a supported YouTube URL, follows the verified player's
-native play/pause state with microphone recording, and lets the learner compare
-the reference with their latest recording locally.
+native play/pause state with microphone recording in Shadowing, and adds a
+Listen first style for reference → record → reflect. Both styles keep the
+learner's latest recording local.
 
 The production artifact is a static React/Vite site deployed through Cloudflare
 Workers Static Assets at <https://shadowing-recorder.htag.uk>. It contains no
@@ -30,7 +31,7 @@ separate public-launch requirements are complete.
 4. Use **Reference**, **My recording**, and restart in the comparison tray. The
    tray becomes a compact floating dock after it scrolls out of view.
 
-`Space` / `Right Arrow` switches between the ready reference and the latest matching recording
+In Shadowing, `Space` / `Right Arrow` switches between the ready reference and the latest matching recording
 when focus is outside an interactive control. Playing either source stops the
 other. Use headphones during practice; an explicit headphone-confirmation gate
 is still pending.
@@ -39,6 +40,28 @@ See the [practice guide](docs/users/how-to-guides/practice-with-a-youtube-video.
 for the complete workflow and the
 [recording, privacy, and browser reference](docs/users/reference/recording-privacy-and-browser-behavior.md)
 for current lifecycle, storage, diagnostics, format, and Safari behavior.
+
+### Listen first
+
+Choose **Listen first · record · reflect** under **Practice style**, then enable
+Practice Mode. Use the main button, **Space**, or **Right Arrow** to play the
+reference, pause it and record your attempt, then stop and listen back. The next
+advance replays the same passage; **New passage** starts a new selection from
+the reference's current position. The microphone stays off during both playback
+steps, and playback ending waits for your next action. Replay waits for the seek
+and actual playback before applying the passage end. If learner playback cannot
+start within five seconds, **Play my attempt** lets you retry. Changing styles finishes
+any active attempt and leaves Practice Mode off.
+
+An unexpected recorder stop releases every microphone track and offers a retry.
+An unrecognised player state removes the player; reload the video before
+continuing practice.
+
+In Shadowing, app-controlled reference resume waits for the previous recording
+to finish and the next microphone stream to be ready before starting playback.
+
+See the [Listen first lifecycle](docs/maintainers/design/listen-first-practice.md)
+for transitions, failure handling, and verification status.
 
 ## Privacy and architecture boundary
 

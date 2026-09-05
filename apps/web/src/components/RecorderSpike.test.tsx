@@ -103,6 +103,209 @@ describe('RecorderSpike', () => {
     vi.unstubAllGlobals()
   })
 
+  it.each([
+    { code: 'Space', key: ' ' },
+    { code: 'ArrowRight', key: 'ArrowRight' },
+    { key: 'ArrowRight' },
+  ])(
+    'advances Listen first with $key ($code) including focused clicker use',
+    async (shortcut) => {
+      const environment = createFakeRecorderEnvironment()
+      const playerApi = new FakeYouTubePlayerApi()
+      vi.spyOn(playerApi.player, 'playVideo').mockImplementation(() =>
+        playerApi.emitState('playing'),
+      )
+      vi.spyOn(playerApi.player, 'pauseVideo').mockImplementation(() =>
+        playerApi.emitState('paused'),
+      )
+      const playAudio = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(function (this: HTMLMediaElement) {
+          fireEvent.play(this)
+          return Promise.resolve()
+        })
+      vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
+        () => undefined,
+      )
+      await renderLoadedRecorder({
+        dependencies: environment.dependencies,
+        playerApi,
+      })
+      fireEvent.change(screen.getByLabelText('Practice style'), {
+        target: { value: 'listen-first' },
+      })
+      await waitFor(() =>
+        expect(screen.getByLabelText('Practice style')).toHaveValue(
+          'listen-first',
+        ),
+      )
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Enable Practice Mode' }),
+      )
+      expect(environment.microphone.requestCalls).toBe(0)
+      const advance = screen.getByRole('button', { name: 'Play reference' })
+      // Native form controls keep their own keyboard behavior.
+      fireEvent.keyDown(screen.getByLabelText('YouTube video URL'), shortcut)
+      expect(playerApi.player.playVideo).not.toHaveBeenCalled()
+      fireEvent.keyDown(advance, { ...shortcut, repeat: true })
+      expect(playerApi.player.playVideo).not.toHaveBeenCalled()
+      playerApi.player.currentTime = 12
+      fireEvent.click(advance)
+      await waitFor(() => expect(advance).toHaveTextContent('Start recording'))
+      expect(environment.microphone.requestCalls).toBe(0)
+      expect(
+        screen
+          .getByRole('list', { name: 'Listen first steps' })
+          .querySelector('[aria-current="step"]'),
+      ).toHaveTextContent('Play reference')
+      playerApi.player.currentTime = 18
+      fireEvent.keyDown(advance, shortcut)
+      await waitFor(() => expect(advance).toHaveTextContent('Stop & listen'))
+      expect(environment.microphone.requestCalls).toBe(1)
+      expect(getRecorderStatus()).toHaveTextContent('reference is paused')
+      fireEvent.keyDown(advance, shortcut)
+      expect(advance).toHaveAttribute('aria-disabled', 'true')
+      fireEvent.keyDown(advance, shortcut)
+      const recorder = environment.recorderFactory.recorders[0]!
+      expect(recorder.stopCalls).toBe(1)
+      expect(playAudio).not.toHaveBeenCalled()
+      await act(async () => {
+        recorder.emitData(new Blob(['voice']))
+        recorder.emitStop()
+      })
+      await waitFor(() => expect(playAudio).toHaveBeenCalledOnce())
+      expect(advance).toHaveTextContent('Play reference')
+      expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+      fireEvent.ended(screen.getByLabelText('Latest recording playback'))
+      expect(environment.microphone.requestCalls).toBe(1)
+      fireEvent.keyDown(advance, shortcut)
+      await waitFor(() => expect(advance).toHaveTextContent('Start recording'))
+      expect(playerApi.player.seekToCalls).toEqual([[12, true]])
+      expect(environment.microphone.requestCalls).toBe(1)
+      fireEvent.click(screen.getByRole('button', { name: 'New passage' }))
+      expect(advance).toHaveTextContent('Play reference')
+    },
+  )
+
+  it('stops Listen first and releases pending microphone access when the page is hidden', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const playerApi = new FakeYouTubePlayerApi()
+    vi.spyOn(playerApi.player, 'playVideo').mockImplementation(() =>
+      playerApi.emitState('playing'),
+    )
+    vi.spyOn(playerApi.player, 'pauseVideo').mockImplementation(() =>
+      playerApi.emitState('paused'),
+    )
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
+      () => undefined,
+    )
+    let grant!: () => void
+    environment.microphone.requestImplementation = () =>
+      new Promise((resolve) => {
+        grant = () => resolve(environment.stream)
+      })
+    await renderLoadedRecorder({
+      dependencies: environment.dependencies,
+      playerApi,
+    })
+    fireEvent.change(screen.getByLabelText('Practice style'), {
+      target: { value: 'listen-first' },
+    })
+    await waitFor(() =>
+      expect(screen.getByLabelText('Practice style')).toHaveValue(
+        'listen-first',
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable Practice Mode' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Play reference' }))
+    const advance = await screen.findByRole('button', {
+      name: 'Start recording',
+    })
+    fireEvent.click(advance)
+    await waitFor(() => expect(environment.microphone.requestCalls).toBe(1))
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    fireEvent(document, new Event('visibilitychange'))
+    await act(async () => grant())
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    expect(environment.recorderFactory.recorders).toHaveLength(0)
+    expect(getRecorderStatus()).toHaveTextContent('page was hidden')
+    expect(
+      screen.getByRole('button', { name: 'Play reference' }),
+    ).toBeDisabled()
+  })
+
+  it('ignores a queued learner play event after disabling Listen first', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const playerApi = new FakeYouTubePlayerApi()
+    vi.spyOn(playerApi.player, 'playVideo').mockImplementation(() =>
+      playerApi.emitState('playing'),
+    )
+    vi.spyOn(playerApi.player, 'pauseVideo').mockImplementation(() =>
+      playerApi.emitState('paused'),
+    )
+    let paused = true
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockImplementation(
+      () => paused,
+    )
+    let resolvePlayback!: () => void
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(() => {
+        paused = false
+        return new Promise((resolve) => {
+          resolvePlayback = resolve
+        })
+      })
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {
+      paused = true
+    })
+    await renderLoadedRecorder({
+      dependencies: environment.dependencies,
+      playerApi,
+    })
+    fireEvent.change(screen.getByLabelText('Practice style'), {
+      target: { value: 'listen-first' },
+    })
+    await waitFor(() =>
+      expect(screen.getByLabelText('Practice style')).toHaveValue(
+        'listen-first',
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable Practice Mode' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Play reference' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start recording' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Stop & listen' }),
+    )
+    await act(async () => {
+      const attempt = environment.recorderFactory.recorders[0]!
+      attempt.emitData(new Blob(['voice']))
+      attempt.emitStop()
+    })
+    await waitFor(() => expect(play).toHaveBeenCalledOnce())
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Disable Practice Mode' }),
+    )
+    const audio = screen.getByLabelText('Latest recording playback')
+    expect(paused).toBe(true)
+    fireEvent.play(audio)
+    expect(
+      screen
+        .getByRole('list', { name: 'Listen first steps' })
+        .querySelector('[aria-current="step"]'),
+    ).toHaveTextContent('Play reference')
+    await act(async () => resolvePlayback())
+    expect(
+      screen.getByRole('button', { name: 'Play reference' }),
+    ).toBeDisabled()
+  })
+
   it('starts empty and reports an invalid submission without mounting an iframe', () => {
     render(<RecorderSpike />)
 
@@ -485,6 +688,22 @@ describe('RecorderSpike', () => {
       document.querySelector('[data-comparison-tray="floating"]'),
     ).not.toBeInTheDocument()
     expect(inlineTray).not.toHaveAttribute('aria-hidden')
+
+    // No new observer threshold fires for a jump from below to above the viewport.
+    emitIntersection(inlineTray, false, 2000)
+    vi.spyOn(inlineTray, 'getBoundingClientRect').mockReturnValue({
+      bottom: -24,
+    } as DOMRect)
+    vi.spyOn(boundary as Element, 'getBoundingClientRect').mockReturnValue({
+      top: 2000,
+      bottom: 2001,
+    } as DOMRect)
+    fireEvent.scroll(window)
+    await waitFor(() =>
+      expect(
+        screen.getByRole('region', { name: 'Playback comparison' }),
+      ).toHaveAttribute('data-comparison-tray', 'floating'),
+    )
   })
 
   it.each([

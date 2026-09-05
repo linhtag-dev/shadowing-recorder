@@ -835,3 +835,140 @@
     transition: none;
   }
 }
+
+.modePicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.modePicker label {
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.modePicker select {
+  max-width: 100%;
+  min-height: 2.8rem;
+  padding: 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.65rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.modePicker > span {
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+}
+
+.listenControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.practiceSteps {
+  display: flex;
+  flex: 1;
+  justify-content: space-around;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.practiceSteps li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #b8c4bb;
+  font-size: 0.8rem;
+}
+
+.practiceSteps li[aria-current='step'] {
+  color: white;
+  font-weight: 800;
+}
+
+.practiceSteps li > span {
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+
+.practiceSteps li[aria-current='step'] > span {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.advanceButton {
+  min-height: 3.3rem;
+  min-width: 10rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: #f7f2e8;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.advanceButton:disabled,
+.advanceButton[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.advanceButton:focus-visible {
+  outline: 2px solid #f7f2e8;
+  outline-offset: 3px;
+}
+
+@media (max-width: 36rem) {
+  .listenControls {
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  .practiceSteps,
+  .advanceButton {
+    width: 100%;
+  }
+
+  :global(body):has(.comparisonDock .listenControls) {
+    padding-bottom: 8rem;
+  }
+}
+
+.newPassageButton {
+  padding: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: #f7f2e8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.newPassageButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 36rem) {
+  :global(body):has(.comparisonDock .listenControls) {
+    padding-bottom: 10.5rem;
+  }
+}

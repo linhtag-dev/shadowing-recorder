@@ -200,7 +200,40 @@ confirmation of this behavior remains pending.
   target two-second confirmed-player-pause protocol remains pending.
 - Attempt list with approximate, discontinuous, and uncertain timing labels.
 
+## Additional practice style: Listen first
+
+Implemented on 2026-09-05. Shadowing remains the default. Listen first adds an
+explicit reference → record → listen cycle, a shared main button and Space /
+Right Arrow action, approximate passage replay, and a responsive three-step
+dock. Microphone access occurs only for the record step. Empty attempts cannot
+automatically play a previous result, and mode changes finish the active attempt
+before switching off. Controller, component, and three-engine browser regressions
+cover the flow; current-build physical-device microphone and Safari playback
+verification remains pending. See the
+[Listen first design](../design/listen-first-practice.md) and
+[automated verification with screenshots](../testing/evidence/listen-first-automation.md).
+
+Follow-up bug review on 2026-09-05 fixed premature replay stops during slow
+seeks, treating buffering as a successful playback start, indefinite learner
+playback waits, missing retry after media-position failures, and queued learner
+play events changing the phase after cancellation. Regressions reproduce these
+failures; browser coverage additionally decodes and plays two successive
+synthetic WAV attempts through the native audio element.
+
 ## Stage 4: Limits and usability hardening
+
+The 2026-09-05 controller review also fixed unexpected recorder stops leaving
+Practice Mode stuck with live microphone tracks, and unknown player states
+being treated as stopped. Unexpected stops now release tracks and enter the
+retryable error state; unknown playback states invalidate the player before
+microphone capture. Focused controller regressions cover both failures.
+
+App-controlled Shadowing reference resume now also waits through an in-progress
+finalisation before pre-arming the next microphone stream. Regression tests
+cover the ordering and cancellation on disable, player replacement, style
+change, and finalisation timeout. This closes a path that could reopen the
+microphone after reference playback had already resumed; confirmation of its
+effect on physical macOS Safari playback remains pending.
 
 - Loading and mapped URL/player error states. Initial slice implemented.
 - Responsive setup and comparison-dock layout. Implemented in automation;

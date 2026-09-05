@@ -13,3 +13,10 @@ Enabling Practice Mode obtains a microphone stream; `PLAYING` starts an attempt,
 The browser microphone adapter requests echo cancellation, noise suppression, and automatic gain control off because simultaneous reference speech caused Chrome's default voice-call processing to produce choppy learner audio. The controller snapshots the accepted track's non-identifying settings for visible diagnostics; browsers remain free to omit unsupported settings.
 
 A zero-byte final Blob is a non-fatal empty attempt. The controller discards it, preserves the previous playable result, releases every track, enters `standby`, and shows a visible explanation without turning Practice Mode off. This accommodates genuine silence producing an empty MP4 on iOS Safari while keeping encoder errors, track loss, and finalisation timeouts on the fatal fail-safe path.
+
+`ListenFirstController` coordinates the additional reference → record → listen
+style through injected player, audio, and clock ports. `RecorderController`
+remains the only microphone owner and accepts explicit recording commands for
+this style while the reference is stopped. Shadowing keeps the existing
+player-driven behavior and pre-arming. See the
+[Listen first design](../../../../docs/maintainers/design/listen-first-practice.md).

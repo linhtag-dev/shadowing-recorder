@@ -1,7 +1,9 @@
 # Practice with a YouTube Video
 
-Shadowing Recorder follows the embedded YouTube player's native playback state
-and records your microphone locally while the reference is playing. Use
+In the default **Shadowing** style, Shadowing Recorder follows the embedded
+YouTube player's native playback state and records your microphone locally
+while the reference is playing. The additional **Listen first** style separates
+reference playback, recording, and reflection. Use
 headphones so the microphone does not capture the reference audio.
 
 ## Load a reference
@@ -44,6 +46,33 @@ control.
 Only the latest completed recording is retained. It remains associated with the
 video used for that attempt. After loading a different video, quick comparison
 is available only when the recording's source matches the ready player.
+
+## Listen first, then try it yourself
+
+1. Choose **Listen first · record · reflect** under **Practice style** and enable
+   **Practice Mode**. Enabling this style does not open the microphone.
+2. Press **Play reference** (or Space / Right Arrow) to listen. Press again when
+   you have heard the passage you want to practice.
+3. The app pauses the reference and asks for microphone permission if needed.
+   Wait for **Recording your attempt**, then speak. Press **Stop & listen** when
+   you finish.
+4. The app finishes the new recording, turns the microphone off, and plays your
+   attempt. Reflect at your own pace; playback ending does not advance the flow.
+5. Press again to replay the same reference passage. It pauses near the end of
+   the passage; press **Start recording** when ready for another attempt.
+
+**New passage** stops playback and clears the replay range. Seek in the reference
+if desired, then press **Play reference** to begin a new passage. Space and Right
+Arrow work while the main action button has focus or while focus is outside
+other interactive controls. The embedded player's own controls retain their
+native keyboard behavior.
+
+An empty attempt offers **Retry recording** and keeps the previous recording
+without playing it automatically. If the browser blocks playback, press **Play
+my attempt**. The same retry appears if playback has not started after five
+seconds. Replaying a passage waits for the video to finish seeking; buffering
+does not advance to recording. Changing practice styles finishes any current recording and turns
+Practice Mode off; enable it again when ready.
 
 ## Finish or change videos
 

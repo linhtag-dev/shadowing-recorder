@@ -1,5 +1,12 @@
 # Microphone and Playback Lifecycle
 
+The player-driven recording and microphone pre-arming rules below describe the
+**Shadowing** style. The additional **Listen first** style uses explicit
+recording with the reference paused and keeps its microphone off during both
+playback steps; its phase policy and acceptance details are defined in
+[Listen first practice](listen-first-practice.md). Shared identity, generation,
+finalisation, stream cleanup, and privacy invariants apply to both styles.
+
 Status: Implemented subsystem design
 
 Last updated: 2026-07-12
