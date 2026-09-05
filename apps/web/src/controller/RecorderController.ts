@@ -352,6 +352,18 @@ export class RecorderController {
 
     this.#playerState = this.#toControllerPlayerState(validation.playbackState)
     if (this.#snapshot.mode === 'listen-first') return validation
+    if (this.#snapshot.state === 'finalising') {
+      const modeChangeGeneration = this.#modeChangeGeneration
+      await this.#waitForFinalisation()
+      if (
+        !this.#practiceEnabled ||
+        modeChangeGeneration !== this.#modeChangeGeneration
+      ) {
+        return { status: 'stale' } as const
+      }
+      const current = this.#validateCurrentPlayerBinding(binding)
+      if (current.status !== 'valid') return current
+    }
     if (this.#practiceEnabled && this.#snapshot.state === 'standby') {
       await this.#requestMicrophoneFromStandby(false)
     } else if (
@@ -552,10 +564,16 @@ export class RecorderController {
       }
     }
 
-    return {
-      status: 'valid',
-      playbackState: parseYouTubePlaybackState(state) ?? 'unstarted',
+    const playbackState = parseYouTubePlaybackState(state)
+    if (playbackState === null) {
+      return {
+        status: 'invalid',
+        message:
+          'The YouTube player returned an unrecognised playback state. The player was removed; load the video again.',
+      }
     }
+
+    return { status: 'valid', playbackState }
   }
 
   #validateCurrentPlayerBinding(
@@ -898,6 +916,12 @@ export class RecorderController {
         }
 
         if (type === 'stop') {
+          if (!attempt.finalisationRequested) {
+            this.#fail(
+              'Recording stopped unexpectedly. The microphone has been stopped; try again.',
+            )
+            return
+          }
           this.#completeFinalisation(attempt)
         }
       })

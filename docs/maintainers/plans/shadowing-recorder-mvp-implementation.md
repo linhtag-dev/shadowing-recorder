@@ -222,6 +222,19 @@ synthetic WAV attempts through the native audio element.
 
 ## Stage 4: Limits and usability hardening
 
+The 2026-09-05 controller review also fixed unexpected recorder stops leaving
+Practice Mode stuck with live microphone tracks, and unknown player states
+being treated as stopped. Unexpected stops now release tracks and enter the
+retryable error state; unknown playback states invalidate the player before
+microphone capture. Focused controller regressions cover both failures.
+
+App-controlled Shadowing reference resume now also waits through an in-progress
+finalisation before pre-arming the next microphone stream. Regression tests
+cover the ordering and cancellation on disable, player replacement, style
+change, and finalisation timeout. This closes a path that could reopen the
+microphone after reference playback had already resumed; confirmation of its
+effect on physical macOS Safari playback remains pending.
+
 - Loading and mapped URL/player error states. Initial slice implemented.
 - Responsive setup and comparison-dock layout. Implemented in automation;
   current dynamic-loader real-device testing remains pending.

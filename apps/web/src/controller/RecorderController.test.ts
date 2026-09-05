@@ -148,6 +148,59 @@ describe('selectRecorderMimeType', () => {
 })
 
 describe('RecorderController', () => {
+  it.each(['playing', 'buffering'] as const)(
+    'releases every track after an unexpected recorder stop while %s',
+    async (state) => {
+      const environment = createFakeRecorderEnvironment(
+        new FakeStream([new FakeTrack(), new FakeTrack()]),
+      )
+      const controller = new RecorderController(environment.dependencies)
+      const boundPlayer = await startPlayerDrivenAttempt(controller)
+      const recorder = environment.recorderFactory.recorders[0]!
+      sendPlayerState(controller, boundPlayer, state)
+      recorder.emitData(new Blob(['partial audio']))
+      recorder.emitStop()
+
+      expect(controller.getSnapshot().state).toBe('error')
+      expect(controller.getSnapshot().errorMessage).toContain('unexpectedly')
+      expect(environment.stream.tracks.map((track) => track.stopCalls)).toEqual(
+        [1, 1],
+      )
+      expect(environment.clock.tasks.size).toBe(0)
+      expect(controller.getSnapshot().result).toBeNull()
+      recorder.emitData(new Blob(['late audio']))
+      recorder.emitStop()
+      expect(controller.getSnapshot().result).toBeNull()
+      environment.microphone.requestImplementation = async () =>
+        new FakeStream()
+      sendPlayerState(controller, boundPlayer, 'playing')
+      controller.enable()
+      await waitForState(controller, 'recording')
+      controller.dispose()
+    },
+  )
+
+  it.each([4, NaN, Infinity])(
+    'rejects unknown player state %s before independent microphone capture',
+    async (state) => {
+      const environment = createFakeRecorderEnvironment()
+      const controller = new RecorderController(environment.dependencies)
+      const boundPlayer = bindTestPlayer(controller)
+      await controller.changeMode('listen-first')
+      controller.enable()
+      boundPlayer.player.playerState = state
+
+      await controller.startIndependentRecording(boundPlayer.binding)
+
+      expect(environment.microphone.requestCalls).toBe(0)
+      expect(controller.getSnapshot().state).toBe('disabled')
+      expect(controller.getSnapshot().playerBindingError?.message).toContain(
+        'unrecognised playback state',
+      )
+      controller.dispose()
+    },
+  )
+
   it('arms first, follows player buffering, and finalises on player pause', async () => {
     const environment = createFakeRecorderEnvironment(
       new FakeStream([new FakeTrack(), new FakeTrack()]),
@@ -428,6 +481,64 @@ describe('RecorderController', () => {
     })
     expect(environment.recorderFactory.recorders).toHaveLength(0)
   })
+
+  it('waits for finalisation and a fresh microphone before approving reference resume', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const controller = new RecorderController(environment.dependencies)
+    const boundPlayer = await startPlayerDrivenAttempt(controller)
+    sendPlayerState(controller, boundPlayer, 'stopped')
+    let grant!: (stream: FakeStream) => void
+    environment.microphone.requestImplementation = () =>
+      new Promise((resolve) => {
+        grant = resolve
+      })
+    let approved = false
+    const preparing = controller
+      .prepareForReferencePlayback(boundPlayer.binding)
+      .then((result) => {
+        approved = result.status === 'valid'
+        return result
+      })
+    await Promise.resolve()
+    expect(approved).toBe(false)
+    const attempt = environment.recorderFactory.recorders[0]!
+    attempt.emitData(new Blob(['voice']))
+    attempt.emitStop()
+    await waitForState(controller, 'requestingMic')
+    expect(approved).toBe(false)
+    expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+    grant(new FakeStream())
+    expect((await preparing).status).toBe('valid')
+    expect(controller.getSnapshot().state).toBe('armed')
+    controller.dispose()
+  })
+
+  it.each(['disable', 'replacement', 'mode change', 'timeout'] as const)(
+    'cancels reference preparation during finalisation on %s',
+    async (interruption) => {
+      const environment = createFakeRecorderEnvironment()
+      const controller = new RecorderController(environment.dependencies)
+      const boundPlayer = await startPlayerDrivenAttempt(controller)
+      sendPlayerState(controller, boundPlayer, 'stopped')
+      const preparing = controller.prepareForReferencePlayback(
+        boundPlayer.binding,
+      )
+      let shutdown: Promise<void> | undefined
+      if (interruption === 'disable') controller.disable()
+      if (interruption === 'replacement')
+        shutdown = controller.shutdownForPlayerChange()
+      if (interruption === 'mode change')
+        shutdown = controller.changeMode('listen-first')
+      if (interruption === 'timeout') environment.clock.runAll()
+      else environment.recorderFactory.recorders[0]!.emitStop()
+
+      expect((await preparing).status).toBe('stale')
+      await shutdown
+      expect(environment.microphone.requestCalls).toBe(1)
+      expect(environment.stream.tracks[0]?.stopCalls).toBe(1)
+      controller.dispose()
+    },
+  )
 
   it('starts a fresh attempt when playback resumes during finalisation', async () => {
     const environment = createFakeRecorderEnvironment()

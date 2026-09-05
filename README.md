@@ -53,6 +53,13 @@ and actual playback before applying the passage end. If learner playback cannot
 start within five seconds, **Play my attempt** lets you retry. Changing styles finishes
 any active attempt and leaves Practice Mode off.
 
+An unexpected recorder stop releases every microphone track and offers a retry.
+An unrecognised player state removes the player; reload the video before
+continuing practice.
+
+In Shadowing, app-controlled reference resume waits for the previous recording
+to finish and the next microphone stream to be ready before starting playback.
+
 See the [Listen first lifecycle](docs/maintainers/design/listen-first-practice.md)
 for transitions, failure handling, and verification status.
 
