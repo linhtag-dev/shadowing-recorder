@@ -318,7 +318,7 @@ test('loads a URL-first recorder without application data services', async ({
     'Recording your microphone',
   )
   await expect(iframe.locator('..')).toHaveCSS('outline-style', 'none')
-  await page.keyboard.press('Alt+C')
+  await page.keyboard.press('Space')
   await expect
     .poll(() =>
       page.evaluate(
@@ -369,7 +369,7 @@ test('loads a URL-first recorder without application data services', async ({
     inlineComparison.getByRole('button', { name: 'Play my recording' }),
   ).toBeEnabled()
   await expect(inlineComparison.getByText('0:23 / 32:38')).toBeVisible()
-  await page.keyboard.press('Alt+C')
+  await page.keyboard.press('ArrowRight')
   await expect
     .poll(() =>
       page.evaluate(

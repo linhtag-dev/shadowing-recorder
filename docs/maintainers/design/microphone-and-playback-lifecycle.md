@@ -40,7 +40,7 @@ not optional optimisations.
 | --- | --- |
 | `RecorderController` | Practice Mode state, microphone requests and tracks, recorder attempts, finalisation, generations, player-binding validation, and the latest completed Blob URL. |
 | `recorderMachine` | The mutually exclusive controller state and legal transitions. It does not own browser resources. |
-| `RecorderSpike` | UI intent, learner `<audio>` playback, app Reference controls, `Alt+C`, and ordering learner-audio shutdown before controller reference handling. |
+| `RecorderSpike` | UI intent, learner `<audio>` playback, app Reference controls, `Space` / `Right Arrow`, and ordering learner-audio shutdown before controller reference handling. |
 | YouTube adapter | Native IFrame API construction and normalized player callbacks. It never owns microphone state. |
 | Browser adapters | `getUserMedia`, `MediaRecorder`, object URLs, MIME capability checks, and clocks behind injectable interfaces. |
 
@@ -191,7 +191,11 @@ request reconciles the current player state after it resolves. This can leave a
 small unrecorded gap, but it cannot reuse an old stream or mix learner playback
 into the new attempt.
 
-### `Alt+C`
+### `Space` / `Right Arrow`
+
+Unmodified Space or Right Arrow cycles when focus is outside editable or interactive controls.
+Ignore key repeats, composition, and already-handled events; preserve native
+key behavior on controls. A handled cycle prevents page scrolling.
 
 The shortcut follows the same source-specific preparation paths. If reference
 capture is still finalising, it records a pending learner-playback intent and

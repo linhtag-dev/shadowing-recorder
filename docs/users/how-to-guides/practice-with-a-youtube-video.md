@@ -37,8 +37,8 @@ Use **Reference**, **My recording**, and restart in the comparison tray. The tra
 becomes a compact floating dock after it scrolls out of view. The full native
 audio control remains available in the **Latest recording** panel.
 
-Playing either source stops the other. `Alt+C` switches between the ready
-reference and the latest matching recording when focus is outside an editable
+Playing either source stops the other. `Space` / `Right Arrow` switches between the ready
+reference and the latest matching recording when focus is outside an interactive
 control.
 
 Only the latest completed recording is retained. It remains associated with the
