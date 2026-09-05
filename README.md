@@ -48,7 +48,9 @@ Practice Mode. Use the main button, **Space**, or **Right Arrow** to play the
 reference, pause it and record your attempt, then stop and listen back. The next
 advance replays the same passage; **New passage** starts a new selection from
 the reference's current position. The microphone stays off during both playback
-steps, and playback ending waits for your next action. Changing styles finishes
+steps, and playback ending waits for your next action. Replay waits for the seek
+and actual playback before applying the passage end. If learner playback cannot
+start within five seconds, **Play my attempt** lets you retry. Changing styles finishes
 any active attempt and leaves Practice Mode off.
 
 See the [Listen first lifecycle](docs/maintainers/design/listen-first-practice.md)

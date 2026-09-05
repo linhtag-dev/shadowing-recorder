@@ -769,6 +769,8 @@ export function RecorderSpike({
     return validation.status === 'valid'
   }, [controller, handlePlayerFailure])
   const playLatestAttempt = () => {
+    // play events are queued; a source switch may already have paused this audio.
+    if (listenFirst && audioRef.current?.paused !== false) return
     if (
       listenFirst &&
       ['recording', 'finalising', 'requestingMic'].includes(

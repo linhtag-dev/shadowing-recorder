@@ -348,4 +348,166 @@ describe('Listen first practice', () => {
     expect(test.recorder.getSnapshot().state).toBe('standby')
     expect(originalState()).toBe(1)
   })
+  it('waits for an asynchronous replay seek before applying the passage end', async () => {
+    const test = await setup()
+    test.player.currentTime = 12
+    await test.startAttempt()
+    await test.finishAttempt()
+    vi.spyOn(test.player, 'seekTo').mockImplementation(() => undefined)
+    const pauses = test.player.pauseVideoCalls
+    const replay = test.flow.advance()
+    await Promise.resolve()
+    test.clock.runAll()
+    await Promise.resolve()
+    expect(test.flow.getSnapshot().busy).toBe(true)
+    expect(test.player.pauseVideoCalls).toBe(pauses)
+    test.player.currentTime = 12
+    test.clock.runAll()
+    await replay
+    test.player.currentTime = 18
+    test.clock.runAll()
+    expect(test.player.playerState).toBe(2)
+  })
+
+  it('does not treat buffering as confirmed reference playback', async () => {
+    const test = await setup()
+    vi.mocked(test.player.playVideo).mockImplementation(() => {
+      test.player.playerState = 3
+    })
+    const starting = test.flow.advance()
+    await Promise.resolve()
+    expect(test.flow.getSnapshot().busy).toBe(true)
+    expect(test.flow.getSnapshot().started).toBe(false)
+    test.emitState('playing')
+    test.clock.runAll()
+    await starting
+    expect(test.flow.getSnapshot()).toMatchObject({
+      busy: false,
+      started: true,
+    })
+  })
+
+  it('offers retry when learner playback never settles and ignores its late completion', async () => {
+    const test = await setup()
+    await test.startAttempt()
+    let resolvePlayback!: () => void
+    test.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePlayback = resolve
+        }),
+    )
+    const finishing = test.finishAttempt()
+    await vi.waitFor(() => expect(test.audio.play).toHaveBeenCalledOnce())
+    test.clock.runAll()
+    await vi.waitFor(() =>
+      expect(test.flow.getSnapshot().needsPlayback).toBe(true),
+    )
+    await finishing
+    expect(test.flow.getSnapshot().busy).toBe(false)
+    const pauses = test.audio.pause.mock.calls.length
+    resolvePlayback()
+    await Promise.resolve()
+    expect(test.flow.getSnapshot().needsPlayback).toBe(true)
+    expect(test.audio.pause.mock.calls.length).toBeGreaterThanOrEqual(pauses)
+    await test.flow.advance()
+    expect(test.audio.play).toHaveBeenCalledTimes(2)
+    expect(test.flow.getSnapshot().needsPlayback).toBe(false)
+  })
+
+  it('settles a pending learner play when practice is disabled', async () => {
+    const test = await setup()
+    await test.startAttempt()
+    let resolvePlayback!: () => void
+    test.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePlayback = resolve
+        }),
+    )
+    let finished = false
+    const finishing = test.finishAttempt().then(() => {
+      finished = true
+    })
+    await vi.waitFor(() => expect(test.audio.play).toHaveBeenCalledOnce())
+    test.recorder.disable()
+    await vi.waitFor(() => expect(finished).toBe(true))
+    expect(test.clock.tasks.size).toBe(0)
+    resolvePlayback()
+    await finishing
+    expect(test.flow.getSnapshot()).toMatchObject({
+      phase: 'reference',
+      started: false,
+    })
+  })
+
+  it('offers learner playback retry when resetting its position throws', async () => {
+    const test = await setup()
+    await test.startAttempt()
+    Object.defineProperty(test.audio, 'currentTime', {
+      configurable: true,
+      get: () => 0,
+      set: () => {
+        throw new Error('media position unavailable')
+      },
+    })
+    await test.finishAttempt()
+    expect(test.flow.getSnapshot()).toMatchObject({
+      phase: 'listen',
+      busy: false,
+      needsPlayback: true,
+    })
+    Object.defineProperty(test.audio, 'currentTime', {
+      configurable: true,
+      writable: true,
+      value: 0,
+    })
+    await test.flow.advance()
+    expect(test.audio.play).toHaveBeenCalledOnce()
+    expect(test.player.seekToCalls).toEqual([])
+  })
+
+  it('retries the original replay seek after its first seek times out', async () => {
+    const test = await setup()
+    test.player.currentTime = 12
+    await test.startAttempt()
+    await test.finishAttempt()
+    const seek = vi
+      .spyOn(test.player, 'seekTo')
+      .mockImplementationOnce(() => undefined)
+    const replay = test.flow.advance()
+    for (let i = 0; i < 41; i++) test.clock.runAll()
+    await replay
+    expect(test.flow.getSnapshot()).toMatchObject({
+      phase: 'reference',
+      started: false,
+      busy: false,
+    })
+    expect(test.player.playerState).toBe(2)
+    await test.flow.advance()
+    expect(seek).toHaveBeenCalledTimes(2)
+    expect(seek).toHaveBeenLastCalledWith(12, true)
+    expect(test.flow.getSnapshot()).toMatchObject({
+      started: true,
+      message: null,
+    })
+  })
+
+  it('does not start the reference when learner audio cannot be stopped', async () => {
+    const test = await setup()
+    await test.startAttempt()
+    await test.finishAttempt()
+    test.audio.pause.mockImplementationOnce(() => {
+      throw new Error('audio stop failed')
+    })
+    const plays = vi.mocked(test.player.playVideo).mock.calls.length
+    await test.flow.advance()
+    expect(test.player.playVideo).toHaveBeenCalledTimes(plays)
+    expect(test.flow.getSnapshot()).toMatchObject({
+      phase: 'listen',
+      busy: false,
+    })
+    await test.flow.advance()
+    expect(test.flow.getSnapshot().phase).toBe('reference')
+  })
 })

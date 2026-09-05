@@ -25,6 +25,8 @@ interface LearnerAudio {
   play(): Promise<void>
 }
 
+const learnerPlaybackTimeoutMilliseconds = 5_000
+
 const initialSnapshot: ListenFirstSnapshot = {
   phase: 'reference',
   started: false,
@@ -45,6 +47,8 @@ export class ListenFirstController {
   #binding: RecorderPlayerBinding | null = null
   #generation = 0
   #cancelWait: (() => void) | null = null
+  #cancelPlayback: (() => void) | null = null
+  #replayPending = false
   #segmentTimer: unknown
   #segmentStart: number | null = null
   #segmentEnd: number | null = null
@@ -89,10 +93,12 @@ export class ListenFirstController {
   stop() {
     ++this.#generation
     this.#cancelWait?.()
+    this.#cancelPlayback?.()
     this.#clearSegmentTimer()
     if (this.#recorder.getSnapshot().mode === 'listen-first') this.#stopAudio()
     this.#segmentStart = null
     this.#segmentEnd = null
+    this.#replayPending = false
     this.#publish(initialSnapshot)
   }
 
@@ -115,11 +121,16 @@ export class ListenFirstController {
       this.stop()
       this.#segmentStart = this.#readTime()
       this.#publish({ phase: 'reference', started: true })
-    } else if (!this.#snapshot.started) {
+    } else if (
+      !this.#snapshot.busy &&
+      !this.#replayPending &&
+      !this.#snapshot.started
+    ) {
       this.#segmentStart ??= this.#readTime()
-      this.#publish({ started: true })
+      this.#publish({ started: true, message: null })
     }
-    if (!this.#snapshot.busy) this.#watchSegment(this.#generation)
+    if (!this.#snapshot.busy && !this.#replayPending)
+      this.#watchSegment(this.#generation)
   }
 
   newPassage() {
@@ -134,12 +145,19 @@ export class ListenFirstController {
   }
 
   learnerPlaybackStarted() {
+    const state = this.#recorder.getSnapshot()
+    if (
+      state.mode !== 'listen-first' ||
+      ['disabled', 'error'].includes(state.state)
+    )
+      return
     if (this.#snapshot.phase === 'listen') {
       this.#publish({ needsPlayback: false, message: null })
       return
     }
     ++this.#generation
     this.#cancelWait?.()
+    this.#cancelPlayback?.()
     this.#clearSegmentTimer()
     this.#publish({
       phase: 'listen',
@@ -172,34 +190,39 @@ export class ListenFirstController {
         this.#snapshot.phase === 'listen' ||
         (this.#snapshot.phase === 'reference' && !this.#snapshot.started)
       ) {
-        const replay = this.#snapshot.phase === 'listen'
-        this.#stopAudio()
+        this.#replayPending ||= this.#snapshot.phase === 'listen'
+        if (!this.#stopAudio())
+          throw new Error('Learner playback could not be stopped')
         this.#segmentStart ??= this.#readTime()
         this.#publish({
           phase: 'reference',
           started: false,
           needsPlayback: false,
         })
-        if (replay) player.seekTo(this.#segmentStart, true)
+        if (this.#replayPending) player.seekTo(this.#segmentStart, true)
         if (!this.#current(generation)) return
         player.playVideo()
         if (!(await this.#waitForPlayer(true, generation))) {
-          if (this.#current(generation))
+          if (this.#current(generation)) {
+            player.pauseVideo()
             this.#publish({
               started: false,
               message:
                 'Reference playback did not start. Press Play reference to retry.',
             })
+          }
           return
         }
         if (!this.#current(generation)) return
+        this.#replayPending = false
         this.#publish({ started: true })
         this.#watchSegment(generation)
       } else if (
         this.#snapshot.phase === 'reference' ||
         state.state === 'standby'
       ) {
-        this.#stopAudio()
+        if (!this.#stopAudio())
+          throw new Error('Learner playback could not be stopped')
         player.pauseVideo()
         if (!(await this.#waitForPlayer(false, generation))) {
           if (this.#current(generation))
@@ -269,19 +292,58 @@ export class ListenFirstController {
       return
     }
     if (!this.#current(generation)) return
-    audio.src = result.objectUrl
-    audio.currentTime = 0
     try {
-      await audio.play()
-      if (!this.#current(generation)) return
-      this.#publish({ needsPlayback: false })
+      if (audio.src !== result.objectUrl) audio.src = result.objectUrl
+      audio.currentTime = 0
+      const outcome = await this.#startLearnerPlayback(audio)
+      if (!this.#current(generation) || outcome === 'cancelled') return
+      if (outcome === 'failed') {
+        this.#stopAudio()
+        this.#offerPlaybackRetry()
+      } else {
+        this.#publish({ needsPlayback: false })
+      }
     } catch {
-      if (this.#current(generation))
-        this.#publish({
-          needsPlayback: true,
-          message: 'Your attempt is ready. Press Play my attempt to listen.',
-        })
+      if (this.#current(generation)) {
+        this.#stopAudio()
+        this.#offerPlaybackRetry()
+      }
     }
+  }
+
+  #offerPlaybackRetry() {
+    this.#publish({
+      needsPlayback: true,
+      message: 'Your attempt is ready. Press Play my attempt to listen.',
+    })
+  }
+
+  #startLearnerPlayback(
+    audio: LearnerAudio,
+  ): Promise<'started' | 'failed' | 'cancelled'> {
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (outcome: 'started' | 'failed' | 'cancelled') => {
+        if (settled) return
+        settled = true
+        this.#clock.clearTimeout(timer)
+        this.#cancelPlayback = null
+        resolve(outcome)
+      }
+      this.#cancelPlayback = () => finish('cancelled')
+      const timer = this.#clock.setTimeout(
+        () => finish('failed'),
+        learnerPlaybackTimeoutMilliseconds,
+      )
+      try {
+        void audio.play().then(
+          () => finish('started'),
+          () => finish('failed'),
+        )
+      } catch {
+        finish('failed')
+      }
+    })
   }
 
   #valid() {
@@ -326,7 +388,23 @@ export class ListenFirstController {
           return
         }
         const active = ['playing', 'buffering'].includes(state.playbackState)
-        if (active === playing) {
+        let ready = playing ? state.playbackState === 'playing' : !active
+        // seekTo() is asynchronous. Do not arm the end timer against the old
+        // paused position until replay has actually moved back into the passage.
+        if (playing && this.#replayPending && this.#segmentEnd !== null) {
+          try {
+            const time = this.#player?.getCurrentTime()
+            ready &&=
+              time !== undefined &&
+              Number.isFinite(time) &&
+              time >= (this.#segmentStart ?? 0) &&
+              time < this.#segmentEnd
+          } catch {
+            finish(false)
+            return
+          }
+        }
+        if (ready) {
           finish(true)
           return
         }
@@ -368,11 +446,22 @@ export class ListenFirstController {
   }
 
   #stopAudio() {
+    let paused = true
     const audio = this.#audio
     if (audio !== null) {
-      audio.pause()
-      audio.currentTime = 0
+      try {
+        audio.pause()
+      } catch {
+        // Cancel other work, but never start another source after this failure.
+        paused = false
+      }
+      try {
+        audio.currentTime = 0
+      } catch {
+        // An unavailable timeline must not block a later playback retry.
+      }
     }
+    return paused
   }
 
   #publish(update: Partial<ListenFirstSnapshot>) {

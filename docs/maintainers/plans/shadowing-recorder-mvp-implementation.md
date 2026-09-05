@@ -213,6 +213,13 @@ verification remains pending. See the
 [Listen first design](../design/listen-first-practice.md) and
 [automated verification with screenshots](../testing/evidence/listen-first-automation.md).
 
+Follow-up bug review on 2026-09-05 fixed premature replay stops during slow
+seeks, treating buffering as a successful playback start, indefinite learner
+playback waits, missing retry after media-position failures, and queued learner
+play events changing the phase after cancellation. Regressions reproduce these
+failures; browser coverage additionally decodes and plays two successive
+synthetic WAV attempts through the native audio element.
+
 ## Stage 4: Limits and usability hardening
 
 - Loading and mapped URL/player error states. Initial slice implemented.

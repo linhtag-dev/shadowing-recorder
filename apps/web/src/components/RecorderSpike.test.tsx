@@ -236,6 +236,76 @@ describe('RecorderSpike', () => {
     ).toBeDisabled()
   })
 
+  it('ignores a queued learner play event after disabling Listen first', async () => {
+    const environment = createFakeRecorderEnvironment()
+    const playerApi = new FakeYouTubePlayerApi()
+    vi.spyOn(playerApi.player, 'playVideo').mockImplementation(() =>
+      playerApi.emitState('playing'),
+    )
+    vi.spyOn(playerApi.player, 'pauseVideo').mockImplementation(() =>
+      playerApi.emitState('paused'),
+    )
+    let paused = true
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockImplementation(
+      () => paused,
+    )
+    let resolvePlayback!: () => void
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(() => {
+        paused = false
+        return new Promise((resolve) => {
+          resolvePlayback = resolve
+        })
+      })
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {
+      paused = true
+    })
+    await renderLoadedRecorder({
+      dependencies: environment.dependencies,
+      playerApi,
+    })
+    fireEvent.change(screen.getByLabelText('Practice style'), {
+      target: { value: 'listen-first' },
+    })
+    await waitFor(() =>
+      expect(screen.getByLabelText('Practice style')).toHaveValue(
+        'listen-first',
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable Practice Mode' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Play reference' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start recording' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Stop & listen' }),
+    )
+    await act(async () => {
+      const attempt = environment.recorderFactory.recorders[0]!
+      attempt.emitData(new Blob(['voice']))
+      attempt.emitStop()
+    })
+    await waitFor(() => expect(play).toHaveBeenCalledOnce())
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Disable Practice Mode' }),
+    )
+    const audio = screen.getByLabelText('Latest recording playback')
+    expect(paused).toBe(true)
+    fireEvent.play(audio)
+    expect(
+      screen
+        .getByRole('list', { name: 'Listen first steps' })
+        .querySelector('[aria-current="step"]'),
+    ).toHaveTextContent('Play reference')
+    await act(async () => resolvePlayback())
+    expect(
+      screen.getByRole('button', { name: 'Play reference' }),
+    ).toBeDisabled()
+  })
+
   it('starts empty and reports an invalid submission without mounting an iframe', () => {
     render(<RecorderSpike />)
 

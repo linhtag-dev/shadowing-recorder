@@ -69,7 +69,9 @@ native keyboard behavior.
 
 An empty attempt offers **Retry recording** and keeps the previous recording
 without playing it automatically. If the browser blocks playback, press **Play
-my attempt**. Changing practice styles finishes any current recording and turns
+my attempt**. The same retry appears if playback has not started after five
+seconds. Replaying a passage waits for the video to finish seeking; buffering
+does not advance to recording. Changing practice styles finishes any current recording and turns
 Practice Mode off; enable it again when ready.
 
 ## Finish or change videos

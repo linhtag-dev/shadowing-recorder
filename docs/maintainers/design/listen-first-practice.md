@@ -52,14 +52,21 @@ An advance waits up to two seconds for a confirmed non-playing reference before
 requesting the microphone. Identity and playback state are revalidated after
 permission and immediately before recording. No active reference, including
 buffering, qualifies for independent recording. Playback-start confirmation is
-also bounded; a failed start offers retry.
+also bounded; buffering alone is not a confirmed start. Replay must reach the
+saved passage before its end timer starts, so a delayed seek cannot pause it at
+the old end position. A failed start pauses the reference and offers retry;
+retry repeats any unconfirmed seek.
 
 Only one advance can be pending. Repeated key events, held keys, composition,
 and modified shortcuts cannot skip steps. Finalisation uses the existing
 five-second watchdog. The attempt selected for automatic reflection must be the
 newly completed result; empty output preserves the previous recording but
 shows **Retry recording** without playing that previous result. A rejected
-learner `play()` offers **Play my attempt** for an explicit retry.
+learner `play()`, a failed media-position reset, or playback still pending after
+five seconds offers **Play my attempt** for an explicit retry. Cancellation
+settles the pending playback operation and removes its watchdog; late promise
+completion cannot clear a retry or update a newer flow. Queued learner play
+events are ignored after the audio has already been paused.
 
 Mode changes, disable, player replacement, identity failure, page interruption,
 and disposal cancel pending phase actions and passage timers. Late permission

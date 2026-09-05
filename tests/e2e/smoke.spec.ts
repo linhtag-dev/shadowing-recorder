@@ -29,6 +29,7 @@ test.beforeEach(async ({ page }) => {
       playerSeekCalls: [] as Array<[number, boolean]>,
       microphoneRequestCalls: 0,
       nextRecordingIsEmpty: false,
+      usePlayableAudio: false,
       requestedUnprocessedAudio: false,
       timeslices: [] as number[],
       trackStopCalls: 0,
@@ -67,6 +68,31 @@ test.beforeEach(async ({ page }) => {
       value: mediaDevices,
     })
 
+    function silentWav() {
+      // A two-second PCM fixture exercises native decoding, without a real mic.
+      const samples = 16_000
+      const bytes = new Uint8Array(44 + samples * 2)
+      const view = new DataView(bytes.buffer)
+      for (const [offset, value] of [
+        [0, 'RIFF'],
+        [8, 'WAVE'],
+        [12, 'fmt '],
+        [36, 'data'],
+      ] as const) {
+        bytes.set(new TextEncoder().encode(value), offset)
+      }
+      view.setUint32(4, 36 + samples * 2, true)
+      view.setUint32(16, 16, true)
+      view.setUint16(20, 1, true)
+      view.setUint16(22, 1, true)
+      view.setUint32(24, 8_000, true)
+      view.setUint32(28, 16_000, true)
+      view.setUint16(32, 2, true)
+      view.setUint16(34, 16, true)
+      view.setUint32(40, samples * 2, true)
+      return bytes
+    }
+
     class SyntheticMediaRecorder extends EventTarget {
       static isTypeSupported(mimeType: string) {
         return mimeType === 'audio/webm;codecs=opus'
@@ -77,7 +103,9 @@ test.beforeEach(async ({ page }) => {
 
       constructor(_stream: unknown, options?: { mimeType?: string }) {
         super()
-        this.mimeType = options?.mimeType ?? 'audio/webm;codecs=opus'
+        this.mimeType = diagnostics.usePlayableAudio
+          ? 'audio/wav'
+          : (options?.mimeType ?? 'audio/webm;codecs=opus')
       }
 
       start(timeslice?: number) {
@@ -101,7 +129,9 @@ test.beforeEach(async ({ page }) => {
         queueMicrotask(() => {
           const contents = diagnostics.nextRecordingIsEmpty
             ? ''
-            : 'synthetic audio'
+            : diagnostics.usePlayableAudio
+              ? silentWav()
+              : 'synthetic audio'
           diagnostics.nextRecordingIsEmpty = false
           const dataEvent = new Event('dataavailable')
           Object.defineProperty(dataEvent, 'data', {
@@ -522,6 +552,7 @@ test('loads a URL-first recorder without application data services', async ({
     playerSeekCalls: [[0, true]],
     microphoneRequestCalls: 3,
     nextRecordingIsEmpty: false,
+    usePlayableAudio: false,
     requestedUnprocessedAudio: true,
     timeslices: [1_000, 1_000, 1_000],
     trackStopCalls: 3,
@@ -646,4 +677,72 @@ test('cycles Listen first through reference, recording, and reflection with clic
   ).toBeEnabled()
   expect(await microphoneRequests()).toBe(1)
   expect(unexpectedRequests).toEqual([])
+})
+
+test('plays successive Listen first attempts through the native audio element', async ({
+  page,
+}) => {
+  await page.route('https://www.youtube-nocookie.com/**', (route) =>
+    route.fulfill({
+      body: '<!doctype html><title>Synthetic reference</title>',
+      contentType: 'text/html',
+    }),
+  )
+  await page.goto('/')
+  await page.evaluate(() => {
+    ;(
+      window as typeof window & {
+        __stageOneMediaFake: { usePlayableAudio: boolean }
+      }
+    ).__stageOneMediaFake.usePlayableAudio = true
+  })
+  await page.getByLabel('Practice style').selectOption('listen-first')
+  await page
+    .getByLabel('YouTube video URL')
+    .fill('https://www.youtube.com/watch?v=stage1_test')
+  await page.getByRole('button', { name: 'Load video' }).click()
+  await expect(page.getByText('Video ready', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Turn Practice Mode on' }).click()
+  const audio = page.getByLabel('Latest recording playback')
+  await audio.evaluate((element: HTMLAudioElement) => {
+    element.muted = true
+  })
+  const advance = page.locator(
+    '[data-comparison-tray="inline"] [data-practice-advance]',
+  )
+  const emitState = (state: number) =>
+    page.evaluate((next) => {
+      ;(
+        window as typeof window & {
+          __stageOnePlayerFake: { emitState(state: number): void }
+        }
+      ).__stageOnePlayerFake.emitState(next)
+    }, state)
+  for (let round = 0; round < 2; round++) {
+    await advance.click()
+    await emitState(1)
+    await expect(advance).toHaveText('Start recording →')
+    await advance.click()
+    await emitState(2)
+    await expect(advance).toHaveText('Stop & listen →')
+    await advance.click()
+    await expect(advance).toHaveText('Play reference →')
+    await expect
+      .poll(() =>
+        audio.evaluate(
+          (element: HTMLAudioElement) =>
+            !element.paused && element.currentTime > 0,
+        ),
+      )
+      .toBe(true)
+    await expect
+      .poll(() =>
+        audio.evaluate((element: HTMLAudioElement) => element.duration),
+      )
+      .toBe(2)
+  }
+  await page.getByRole('button', { name: 'Disable Practice Mode' }).click()
+  await expect
+    .poll(() => audio.evaluate((element: HTMLAudioElement) => element.paused))
+    .toBe(true)
 })
