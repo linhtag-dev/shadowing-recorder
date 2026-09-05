@@ -87,7 +87,7 @@ For every required browser and physical-device row from
    reported MIME type, and playable learner audio. If natural buffering occurs,
    confirm capture pauses and resumes without ending that attempt.
 6. Exercise **Reference**, **My recording**, restart, the floating comparison
-   dock, and `Alt+C`. Confirm app-initiated reference and learner playback do not
+   dock, and `Space` / `Right Arrow`. Confirm app-initiated reference and learner playback do not
    remain audible together. Complete another attempt and confirm it replaces
    the previous latest recording.
 7. Submit an invalid URL, a repeated valid URL, and a second valid URL. Confirm

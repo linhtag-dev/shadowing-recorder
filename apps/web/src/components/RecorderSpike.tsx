@@ -196,11 +196,13 @@ function ComparisonControls({
   )
 }
 
-function isEditableShortcutTarget(target: EventTarget | null) {
+function isInteractiveShortcutTarget(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
     (target.isContentEditable ||
-      ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName))
+      target.closest(
+        'input, select, textarea, button, a[href], summary, audio, video, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="checkbox"], [role="switch"], [role="slider"], [role="textbox"], [role="combobox"], [role="listbox"], [role="menuitem"], [role="tab"], [role="radio"], [role="spinbutton"], [tabindex]:not([tabindex="-1"])',
+      ) !== null)
   )
 }
 
@@ -803,12 +805,16 @@ export function RecorderSpike({
       if (
         event.defaultPrevented ||
         event.repeat ||
-        !event.altKey ||
+        event.isComposing ||
+        event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
-        event.code !== 'KeyC' ||
-        isEditableShortcutTarget(event.target)
+        (event.code !== 'Space' &&
+          event.key !== ' ' &&
+          event.code !== 'ArrowRight' &&
+          event.key !== 'ArrowRight') ||
+        isInteractiveShortcutTarget(event.target)
       ) {
         return
       }
@@ -994,7 +1000,7 @@ export function RecorderSpike({
         )}
         <section
           aria-hidden={showCompactDock ? true : undefined}
-          aria-keyshortcuts="Alt+C"
+          aria-keyshortcuts="Space ArrowRight"
           aria-label="Playback comparison"
           className={styles.comparisonTray}
           data-comparison-tray="inline"
@@ -1008,7 +1014,7 @@ export function RecorderSpike({
           ref={comparisonTrayRef}
         >
           <div className={styles.comparisonTrayHeading}>
-            <p>Compare playback</p>
+            <p>Compare playback · Space / → to cycle</p>
             <span aria-live="polite">{comparisonStatus}</span>
           </div>
           <ComparisonControls
@@ -1028,7 +1034,7 @@ export function RecorderSpike({
 
       {showCompactDock ? (
         <section
-          aria-keyshortcuts="Alt+C"
+          aria-keyshortcuts="Space ArrowRight"
           aria-label="Playback comparison"
           className={styles.comparisonDock}
           data-comparison-tray="floating"

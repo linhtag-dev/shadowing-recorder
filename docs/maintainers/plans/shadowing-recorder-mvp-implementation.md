@@ -155,7 +155,7 @@ Status: In progress. The dynamic-video build loads the YouTube IFrame Player
 API and connects `PLAYING`, `BUFFERING`, `PAUSED`, and `ENDED` events to an
 explicitly enabled Practice Mode. It implements post-permission reconciliation,
 attempt-scoped chunk ownership, a five-second finalisation watchdog,
-latest-recording playback, initial one-source comparison controls, `Alt+C`
+latest-recording playback, initial one-source comparison controls, `Space` / `Right Arrow`
 switching, and a responsive floating comparison dock. Full playback-pause
 confirmation, timing ownership, resource limits, consent/headphone confirmation,
 and the attempt list remain.
@@ -196,7 +196,7 @@ confirmation of this behavior remains pending.
 - Five-second finalisation watchdog. Implemented. Buffering, heartbeat, timing,
   duration, and playback-request timer ownership remains pending.
 - One-audio-source playback interlock. Initial reference/latest controls,
-  restart, `Alt+C`, and stop-the-other-source behavior are implemented. The
+  restart, `Space` / `Right Arrow`, and stop-the-other-source behavior are implemented. The
   target two-second confirmed-player-pause protocol remains pending.
 - Attempt list with approximate, discontinuous, and uncertain timing labels.
 

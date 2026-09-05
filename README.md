@@ -30,8 +30,8 @@ separate public-launch requirements are complete.
 4. Use **Reference**, **My recording**, and restart in the comparison tray. The
    tray becomes a compact floating dock after it scrolls out of view.
 
-`Alt+C` switches between the ready reference and the latest matching recording
-when focus is outside an editable control. Playing either source stops the
+`Space` / `Right Arrow` switches between the ready reference and the latest matching recording
+when focus is outside an interactive control. Playing either source stops the
 other. Use headphones during practice; an explicit headphone-confirmation gate
 is still pending.
 

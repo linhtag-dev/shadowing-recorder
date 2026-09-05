@@ -37,9 +37,9 @@ playback again releases it. This avoids carrying a capture stream across iOS
 Safari's learner-playback audio-session switch or opening one after reference
 audio has already started.
 
-Playing either the reference or learner recording stops the other. `Alt+C`
+Playing either the reference or learner recording stops the other. `Space` / `Right Arrow`
 switches between the ready reference and the latest matching recording when
-focus is outside an editable control.
+focus is outside an interactive control.
 
 ## Headphones and microphone diagnostics
 
