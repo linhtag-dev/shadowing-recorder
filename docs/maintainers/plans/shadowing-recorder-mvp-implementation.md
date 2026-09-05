@@ -200,6 +200,19 @@ confirmation of this behavior remains pending.
   target two-second confirmed-player-pause protocol remains pending.
 - Attempt list with approximate, discontinuous, and uncertain timing labels.
 
+## Additional practice style: Listen first
+
+Implemented on 2026-09-05. Shadowing remains the default. Listen first adds an
+explicit reference → record → listen cycle, a shared main button and Space /
+Right Arrow action, approximate passage replay, and a responsive three-step
+dock. Microphone access occurs only for the record step. Empty attempts cannot
+automatically play a previous result, and mode changes finish the active attempt
+before switching off. Controller, component, and three-engine browser regressions
+cover the flow; current-build physical-device microphone and Safari playback
+verification remains pending. See the
+[Listen first design](../design/listen-first-practice.md) and
+[automated verification with screenshots](../testing/evidence/listen-first-automation.md).
+
 ## Stage 4: Limits and usability hardening
 
 - Loading and mapped URL/player error states. Initial slice implemented.

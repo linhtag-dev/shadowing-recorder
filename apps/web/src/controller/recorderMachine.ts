@@ -13,6 +13,8 @@ export type RecorderState =
 export type RecorderMachineEvent =
   | { type: 'DISABLE' }
   | { type: 'ENABLE' }
+  | { type: 'ENABLE_MANUAL' }
+  | { type: 'START_RECORDING' }
   | { type: 'FAILURE' }
   | { type: 'FINALISED' }
   | { type: 'FINALISED_DISABLED' }
@@ -33,6 +35,7 @@ export const recorderMachine = createMachine({
         DISABLE: 'disabled',
         FAILURE: 'error',
         PLAYER_PLAYING: 'recording',
+        START_RECORDING: 'recording',
         RELEASE_MICROPHONE: 'standby',
       },
     },
@@ -46,12 +49,14 @@ export const recorderMachine = createMachine({
     disabled: {
       on: {
         ENABLE: 'requestingMic',
+        ENABLE_MANUAL: 'standby',
       },
     },
     error: {
       on: {
         DISABLE: 'disabled',
         ENABLE: 'requestingMic',
+        ENABLE_MANUAL: 'standby',
       },
     },
     finalising: {

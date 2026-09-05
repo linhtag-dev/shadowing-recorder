@@ -1,5 +1,12 @@
 # Recording, Privacy, and Browser Behavior
 
+The automatic play-to-record and microphone pre-arming behavior below applies
+to **Shadowing**. In **Listen first**, reference playback, recording, and learner
+playback are separate steps. Its microphone is off during both playback steps,
+and playback ending waits for the learner. The same session-local storage,
+format selection, and failure cleanup apply to both styles. See the
+[practice guide](../how-to-guides/practice-with-a-youtube-video.md).
+
 This reference describes the user-visible behavior of the current pre-launch
 build. Target MVP requirements may include behavior that is not implemented
 yet; the

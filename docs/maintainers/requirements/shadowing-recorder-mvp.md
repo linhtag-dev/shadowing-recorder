@@ -1,5 +1,10 @@
 # Shadowing Recorder MVP Requirements
 
+Player-driven recording and pre-arming requirements in this document refer to
+the default **Shadowing** style. **Listen first** is an additional style with
+explicit recording while the reference is paused; shared safety and privacy
+requirements continue to apply.
+
 Status: Draft  
 Last updated: 2026-07-12
 
@@ -207,3 +212,26 @@ The MVP is complete only when all criteria below pass. Runtime terminology and b
 - No learner recording, microphone chunk, selected URL, video ID, player event, diagnostic, or consent marker is sent to an application server.
 - The selected video ID remains in session-local browser state and never appears in the application URL path, query, or fragment; privacy copy separately explains unavoidable static-host delivery metadata and any retained infrastructure logs.
 - Permission denial, unavailable videos, unsupported recording, empty output, resource limits, and player/recorder errors are explained without an iframe constructed from unvalidated input, false recording state, invisible live microphone, app-initiated learner/YouTube overlap, or a recorder active while learner-attempt audio plays.
+
+
+## Additional Listen first acceptance
+
+- The learner can select Shadowing or Listen first. Changing styles finishes
+  the current attempt, stops both playback sources, and leaves Practice Mode off.
+- Listen first presents reference, record, and listen steps with one main action
+  accessible by button, Space, or Right Arrow. Held keys and pending transitions
+  cannot skip steps; other interactive controls keep native keyboard behavior.
+- Reference and learner playback run with no microphone stream. Recording starts
+  only after an explicit advance, confirmed reference pause, permission, and
+  revalidated player identity. Every attempt uses a fresh microphone stream.
+- Stop-and-listen waits for finalisation and plays only the newly completed
+  attempt. Empty output preserves the previous result without playing it;
+  rejected learner playback offers an explicit retry.
+- Playback ending waits for input. Advancing after reflection replays the same
+  approximate passage. New passage clears the range for a new selection.
+- Disable, mode changes, replacement, hidden-page interruption, fatal errors,
+  and stale callbacks preserve microphone cleanup and cancel pending playback.
+- The feature adds no backend, telemetry, persistence, or learner-data request.
+
+See [Listen first practice](../design/listen-first-practice.md) for the runtime
+policy, timing limitations, and verification coverage.

@@ -529,3 +529,121 @@ test('loads a URL-first recorder without application data services', async ({
 
   expect(unexpectedRequests).toEqual([])
 })
+
+test('cycles Listen first through reference, recording, and reflection with clicker keys', async ({
+  page,
+}) => {
+  const unexpectedRequests: string[] = []
+  page.on('request', (request) => {
+    if (isUnexpectedRuntimeRequest(request.url()))
+      unexpectedRequests.push(request.url())
+  })
+  await page.route('https://www.youtube-nocookie.com/**', (route) =>
+    route.fulfill({
+      body: '<!doctype html><title>Practice reference</title><style>body{display:grid;place-content:center;height:90vh;color:#b8c4bb;font:16px system-ui}</style><p>Reference preview (synthetic test player)</p>',
+      contentType: 'text/html',
+    }),
+  )
+  await page.addInitScript(() => {
+    HTMLMediaElement.prototype.play = function () {
+      this.dispatchEvent(new Event('play'))
+      return Promise.resolve()
+    }
+    HTMLMediaElement.prototype.pause = function () {
+      this.dispatchEvent(new Event('pause'))
+    }
+  })
+  const emitState = (state: number) =>
+    page.evaluate((next) => {
+      ;(
+        window as typeof window & {
+          __stageOnePlayerFake: { emitState(state: number): void }
+        }
+      ).__stageOnePlayerFake.emitState(next)
+    }, state)
+  const microphoneRequests = () =>
+    page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __stageOneMediaFake: { microphoneRequestCalls: number }
+          }
+        ).__stageOneMediaFake.microphoneRequestCalls,
+    )
+  await page.goto('/')
+  await page.getByLabel('Practice style').selectOption('listen-first')
+  await page
+    .getByLabel('YouTube video URL')
+    .fill('https://www.youtube.com/watch?v=stage1_test')
+  await page.getByRole('button', { name: 'Load video' }).click()
+  await expect(page.getByText('Video ready', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Turn Practice Mode on' }).click()
+  expect(await microphoneRequests()).toBe(0)
+  const tray = page.locator('[data-comparison-tray="inline"]')
+  const advance = tray.locator('[data-practice-advance]')
+  await advance.click()
+  await emitState(1)
+  await expect(advance).toHaveText('Start recording →')
+  expect(await microphoneRequests()).toBe(0)
+  await page.keyboard.press('ArrowRight')
+  await emitState(2)
+  await expect(advance).toHaveText('Stop & listen →')
+  expect(await microphoneRequests()).toBe(1)
+  await page.keyboard.press('Space')
+  await expect(advance).toHaveText('Play reference →')
+  await expect(tray.locator('[aria-current="step"]')).toHaveText('3Listen')
+  await page.getByLabel('Latest recording playback').dispatchEvent('ended')
+  expect(await microphoneRequests()).toBe(1)
+  await advance.focus()
+  await page.keyboard.press('ArrowRight')
+  await emitState(1)
+  await expect(advance).toHaveText('Start recording →')
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __stageOneMediaFake: { playerSeekCalls: Array<[number, boolean]> }
+            }
+          ).__stageOneMediaFake.playerSeekCalls,
+      ),
+    )
+    .toEqual([[23, true]])
+  expect(await microphoneRequests()).toBe(1)
+
+  await page.getByLabel('YouTube video URL').fill('')
+  await page.setViewportSize({ width: 1280, height: 1600 })
+  await page.locator('[aria-labelledby="video-title"]').screenshot({
+    path: test.info().outputPath('listen-first-desktop.png'),
+    animations: 'disabled',
+  })
+  // Both layouts expose the same phase and primary action at narrow widths.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await tray.evaluate((element) => {
+    window.scrollTo(
+      0,
+      window.scrollY + element.getBoundingClientRect().bottom + 24,
+    )
+  })
+  await expect(
+    page.locator('[data-comparison-tray="floating"] [data-practice-advance]'),
+  ).toBeVisible()
+  await page.screenshot({
+    path: test.info().outputPath('listen-first-mobile.png'),
+    animations: 'disabled',
+  })
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true)
+  await page.getByLabel('Practice style').selectOption('shadowing')
+  await expect(
+    page.getByRole('button', { name: 'Turn Practice Mode on' }),
+  ).toBeEnabled()
+  expect(await microphoneRequests()).toBe(1)
+  expect(unexpectedRequests).toEqual([])
+})
